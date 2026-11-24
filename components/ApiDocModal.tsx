@@ -39,7 +39,19 @@ curl -X POST "http://localhost:3000/api/logs" \\
   }'
 
 # 2. 查询日志（支持按级别、服务、关键词和时间过滤）
-curl "http://localhost:3000/api/logs?level=error&search=订单&page=1&limit=20"`,
+curl "http://localhost:3000/api/logs?level=error&search=订单&page=1&limit=20"
+
+# 3. 删除单条日志（需鉴权）
+curl -X DELETE "http://localhost:3000/api/logs?id=<LOG_ID>" \\
+  -H "x-api-key: ${currentKey}"
+
+# 4. 批量删除日志（需鉴权）
+curl -X DELETE "http://localhost:3000/api/logs" \\
+  -H "Content-Type: application/json" \\
+  -H "x-api-key: ${currentKey}" \\
+  -d '{
+    "ids": ["<LOG_ID_1>", "<LOG_ID_2>"]
+  }'`,
 
     js: `// Node.js / Browser (Fetch API)
 async function sendLog() {

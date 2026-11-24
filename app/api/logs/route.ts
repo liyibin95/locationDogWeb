@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getLogsCollection } from '@/lib/mongodb';
-import { validateApiKey } from '@/lib/auth';
+import { validateApiKey, validateAdminOrApiKey } from '@/lib/auth';
 import { LogDocument, LogLevel } from '@/types/log';
-import { Filter } from 'mongodb';
+import { Filter, ObjectId } from 'mongodb';
 
 export const dynamic = 'force-dynamic';
 
@@ -195,3 +195,98 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+/**
+ * DELETE /api/logs - 删除日志（支持单条或批量删除）
+ * 支持通过 Body { ids: string[] } 或 Query 参数 ?id=xxx 删除
+ * 鉴权校验：通过页面登录 Cookie 或 API Key
+ */
+export async function DELETE(request: NextRequest) {
+  // 1. 鉴权校验
+  const auth = await validateAdminOrApiKey(request);
+  if (!auth.authenticated) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: auth.reason || '未授权：删除操作需要管理员权限或有效 API Key',
+      },
+      { status: 401 }
+    );
+  }
+
+  try {
+    let idsToDelete: string[] = [];
+
+    // 从 Query 参数获取 id
+    const { searchParams } = new URL(request.url);
+    const queryId = searchParams.get('id');
+    if (queryId) {
+      idsToDelete.push(queryId.trim());
+    }
+
+    // 从 Body 获取 ids
+    try {
+      const body = await request.json();
+      if (body && Array.isArray(body.ids)) {
+        idsToDelete.push(...body.ids);
+      } else if (body && typeof body.id === 'string') {
+        idsToDelete.push(body.id);
+      }
+    } catch {
+      // Body 为空时允许仅依赖 queryId
+    }
+
+    // 去重并过滤合法 ObjectId
+    idsToDelete = Array.from(new Set(idsToDelete.filter(Boolean)));
+
+    if (idsToDelete.length === 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: '参数错误：未提供要删除的日志 ID',
+        },
+        { status: 400 }
+      );
+    }
+
+    const objectIds: ObjectId[] = [];
+    for (const id of idsToDelete) {
+      try {
+        objectIds.push(new ObjectId(id));
+      } catch {
+        // 忽略非有效 ObjectId 格式
+      }
+    }
+
+    if (objectIds.length === 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: '参数错误：提供的 ID 均非合法的日志记录 ID',
+        },
+        { status: 400 }
+      );
+    }
+
+    const collection = await getLogsCollection();
+    const result = await collection.deleteMany({
+      _id: { $in: objectIds as any },
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: `成功删除 ${result.deletedCount} 条日志`,
+      deletedCount: result.deletedCount,
+    });
+  } catch (error: any) {
+    console.error('Error deleting logs:', error);
+    return NextResponse.json(
+      {
+        success: false,
+        error: error.message || '删除日志失败，请检查数据库连接。',
+      },
+      { status: 500 }
+    );
+  }
+}
+

@@ -187,7 +187,38 @@ curl "https://your-domain.vercel.app/api/logs?level=error&search=支付&page=1&l
 
 ---
 
-### 3. 获取统计概览 (`GET /api/logs/stats`)
+### 3. 删除日志 (`DELETE /api/logs`)
+
+> ⚠️ **鉴权要求**：该接口受鉴权保护。支持页面登录 Cookie 或在请求头中携带 API Key。
+
+#### 单条删除 (Query)
+```bash
+curl -X DELETE "https://your-domain.vercel.app/api/logs?id=664c1234567890abcdef1234" \
+  -H "x-api-key: next-log-secret-key-2026"
+```
+
+#### 批量删除 (Body)
+```bash
+curl -X DELETE "https://your-domain.vercel.app/api/logs" \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: next-log-secret-key-2026" \
+  -d '{
+    "ids": ["664c1234567890abcdef1234", "664c5678901234abcdef5678"]
+  }'
+```
+
+#### 成功响应 (HTTP 200)
+```json
+{
+  "success": true,
+  "message": "成功删除 2 条日志",
+  "deletedCount": 2
+}
+```
+
+---
+
+### 4. 获取统计概览 (`GET /api/logs/stats`)
 
 返回总条数、各级别分布以及活跃服务统计。
 

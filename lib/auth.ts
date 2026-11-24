@@ -1,5 +1,7 @@
+import { AUTH_COOKIE_NAME, verifyAuthToken } from '@/lib/page-auth';
+
 /**
- * 日志写入接口鉴权工具
+ * 日志写入与管理接口鉴权工具
  */
 
 export interface AuthResult {
@@ -54,3 +56,24 @@ export function validateApiKey(request: Request): AuthResult {
 
   return { authenticated: true };
 }
+
+/**
+ * 校验写操作/管理操作鉴权：支持页面 Cookie 认证或者 API Key 鉴权
+ */
+export async function validateAdminOrApiKey(request: Request): Promise<AuthResult> {
+  // 1. 优先检查页面 Cookie 鉴权
+  const cookieHeader = request.headers.get('cookie') || '';
+  const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${AUTH_COOKIE_NAME}=([^;]+)`));
+  const token = match ? match[1] : null;
+
+  if (token) {
+    const isPageAuthed = await verifyAuthToken(token);
+    if (isPageAuthed) {
+      return { authenticated: true };
+    }
+  }
+
+  // 2. 检查 API Key 鉴权
+  return validateApiKey(request);
+}
+

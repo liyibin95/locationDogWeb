@@ -8,7 +8,7 @@ import { LogTable } from '@/components/LogTable';
 import { CreateLogModal } from '@/components/CreateLogModal';
 import { ApiDocModal } from '@/components/ApiDocModal';
 import { LogDocument, LogLevel, LogStats, PaginationMeta } from '@/types/log';
-import { AlertCircle, ExternalLink } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ExternalLink } from 'lucide-react';
 
 export default function Home() {
   const [logs, setLogs] = useState<LogDocument[]>([]);
@@ -30,6 +30,7 @@ export default function Home() {
   // UI States
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successToast, setSuccessToast] = useState<string | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isApiDocsOpen, setIsApiDocsOpen] = useState(false);
 
@@ -115,6 +116,65 @@ export default function Home() {
     setEndDate('');
   };
 
+  const showSuccess = (msg: string) => {
+    setSuccessToast(msg);
+    setTimeout(() => {
+      setSuccessToast(null);
+    }, 3000);
+  };
+
+  // 单条删除日志
+  const handleDeleteLog = async (id: string): Promise<boolean> => {
+    try {
+      const res = await fetch(`/api/logs?id=${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: {
+          'x-api-key': apiKey,
+        },
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showSuccess('日志删除成功');
+        fetchLogs(pagination.page);
+        fetchStats();
+        return true;
+      } else {
+        setErrorMessage(data.error || '删除日志失败');
+        return false;
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || '网络请求异常，删除失败');
+      return false;
+    }
+  };
+
+  // 批量删除日志
+  const handleBatchDelete = async (ids: string[]): Promise<boolean> => {
+    try {
+      const res = await fetch('/api/logs', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+        },
+        body: JSON.stringify({ ids }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showSuccess(`批量删除成功，共删除 ${data.deletedCount ?? ids.length} 条日志`);
+        fetchLogs(pagination.page);
+        fetchStats();
+        return true;
+      } else {
+        setErrorMessage(data.error || '批量删除日志失败');
+        return false;
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || '网络请求异常，批量删除失败');
+      return false;
+    }
+  };
+
   const availableServices = stats?.services.map((s) => s.name) || [];
 
   return (
@@ -134,7 +194,15 @@ export default function Home() {
 
       {/* Main Content Area */}
       <main className="flex-1 mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-6">
-        {/* Error notification banner if DB is not connected */}
+        {/* Success toast banner */}
+        {successToast && (
+          <div className="flex items-center space-x-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-300">
+            <CheckCircle2 className="h-4 w-4 text-emerald-400 flex-shrink-0" />
+            <span>{successToast}</span>
+          </div>
+        )}
+
+        {/* Error notification banner if DB is not connected or error occurred */}
         {errorMessage && (
           <div className="flex items-start justify-between rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-xs text-rose-300">
             <div className="flex items-center space-x-2">
@@ -186,6 +254,8 @@ export default function Home() {
           onPageChange={(p) => fetchLogs(p)}
           isLoading={isLoading}
           onOpenCreate={() => setIsCreateOpen(true)}
+          onDeleteLog={handleDeleteLog}
+          onBatchDelete={handleBatchDelete}
         />
       </main>
 
