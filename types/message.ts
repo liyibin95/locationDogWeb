@@ -55,22 +55,27 @@ export interface CreateMessageInput {
 
 export interface UpdateMessageInput extends Partial<CreateMessageInput> {
   _id?: string;
-  key?: string;
+}
+
+export interface MessageQueryParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  type?: string;
+  status?: string;
+  priority?: string;
+  appId?: string;
+  isPopup?: string;
 }
 
 export interface ClientMessageQuery {
-  key?: string;
   appId?: string;
   userId?: string;
-  versionCode?: number;
   channel?: string;
-  type?: MessageType;
+  versionCode?: number;
+  type?: string;
   popupOnly?: boolean;
   limit?: number;
-}
-
-export interface ClientMessageItem extends MessageDocument {
-  isRead?: boolean;
 }
 
 export interface MessageStats {
@@ -81,5 +86,5 @@ export interface MessageStats {
   popupCount: number;
   alerts: number;
   byType: { type: string; count: number }[];
-  appIds?: { name: string; count: number }[];
+  appIds: { name: string; count: number }[];
 }

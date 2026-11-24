@@ -50,10 +50,34 @@ export interface ConfigQueryParams {
 export interface ClientConfigQuery {
   appId?: string;
   environment?: string;
-  channel?: string;
+  env?: string;
   versionCode?: number;
+  channel?: string;
   group?: string;
   key?: string;
+}
+
+export interface ResolvedClientConfigItem {
+  key: string;
+  value: any;
+  rawValue: string;
+  type: ConfigType;
+  group: string;
+  appId: string;
+  environment: ConfigEnvironment;
+  channel?: string;
+  description?: string;
+  updatedAt: string | Date;
+}
+
+export interface ClientConfigResponse {
+  success: boolean;
+  appId: string;
+  environment: string;
+  configs: Record<string, any>;
+  items: ResolvedClientConfigItem[];
+  version: number;
+  count: number;
 }
 
 export interface ConfigStats {

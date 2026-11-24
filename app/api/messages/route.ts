@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
         // 支持通过 ID 查询单条消息详情
         if (id) {
           try {
-            const doc = await collection.findOne({ _id: new ObjectId(id) });
+            const doc = await collection.findOne({ _id: new ObjectId(id) as any });
             if (!doc) {
               return { success: false, error: '未找到指定消息', status: 404 };
             }
@@ -249,7 +249,6 @@ export async function POST(request: NextRequest) {
 
     const result = await collection.insertOne(newMessage);
 
-    // 主动清除消息相关 Redis 缓存
     deleteCachePattern('cache:messages:*').catch(() => {});
 
     return NextResponse.json(
@@ -310,7 +309,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const collection = await getMessagesCollection();
-    const existing = await collection.findOne({ _id: objectId });
+    const existing = await collection.findOne({ _id: objectId as any });
     if (!existing) {
       return NextResponse.json({ success: false, error: '未找到指定消息' }, { status: 404 });
     }
@@ -328,7 +327,7 @@ export async function PUT(request: NextRequest) {
         const existingWithKey = await collection.findOne({
           key: finalKey,
           appId: targetApp,
-          _id: { $ne: objectId },
+          _id: { $ne: objectId as any },
         });
         if (existingWithKey) {
           return NextResponse.json(
@@ -365,15 +364,14 @@ export async function PUT(request: NextRequest) {
       updateDoc.expireAt = expireAt ? new Date(expireAt) : null;
     }
 
-    await collection.updateOne({ _id: objectId }, updateOps);
-    const updated = await collection.findOne({ _id: objectId });
+    await collection.updateOne({ _id: objectId as any }, updateOps);
+    const updated = await collection.findOne({ _id: objectId as any });
 
-    // 主动清除消息相关 Redis 缓存
     deleteCachePattern('cache:messages:*').catch(() => {});
 
     return NextResponse.json({
       success: true,
-      data: { ...updated, _id: updated?._id.toString() },
+      data: { ...updated, _id: updated?._id?.toString() },
       message: '消息更新成功',
     });
   } catch (error: any) {
@@ -418,13 +416,12 @@ export async function DELETE(request: NextRequest) {
     }
 
     const collection = await getMessagesCollection();
-    const result = await collection.deleteOne({ _id: objectId });
+    const result = await collection.deleteOne({ _id: objectId as any });
 
     if (result.deletedCount === 0) {
       return NextResponse.json({ success: false, error: '未找到指定消息或已被删除' }, { status: 404 });
     }
 
-    // 主动清除消息相关 Redis 缓存
     deleteCachePattern('cache:messages:*').catch(() => {});
 
     return NextResponse.json({

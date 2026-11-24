@@ -161,7 +161,6 @@ export async function POST(request: NextRequest) {
     }
 
     const cleanKey = key.trim();
-    // 键名格式校验：支持字母、数字、下划线、中划线、点
     if (!/^[a-zA-Z0-9_.-]+$/.test(cleanKey)) {
       return NextResponse.json(
         { success: false, error: '配置键 (key) 仅支持字母、数字、下划线 (_)、中划线 (-) 或点 (.)' },
@@ -190,7 +189,6 @@ export async function POST(request: NextRequest) {
 
     const collection = await getConfigsCollection();
 
-    // 检查键唯一性：同一个 appId、group、environment 下 key 不允许重复
     const existing = await collection.findOne({
       key: cleanKey,
       appId: appId.trim() || 'all',
@@ -227,7 +225,6 @@ export async function POST(request: NextRequest) {
 
     const result = await collection.insertOne(newConfig);
 
-    // 主动清除配置相关 Redis 缓存
     deleteCachePattern('cache:configs:*').catch(() => {});
 
     return NextResponse.json(
@@ -271,7 +268,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const collection = await getConfigsCollection();
-    const current = await collection.findOne({ _id: objectId });
+    const current = await collection.findOne({ _id: objectId as any });
     if (!current) {
       return NextResponse.json({ success: false, error: '未找到指定配置' }, { status: 404 });
     }
@@ -317,16 +314,15 @@ export async function PUT(request: NextRequest) {
       updateDoc.maxVersionCode = maxVersionCode === null || maxVersionCode === '' ? undefined : Number(maxVersionCode);
     }
 
-    await collection.updateOne({ _id: objectId }, { $set: updateDoc });
+    await collection.updateOne({ _id: objectId as any }, { $set: updateDoc });
 
-    const updated = await collection.findOne({ _id: objectId });
+    const updated = await collection.findOne({ _id: objectId as any });
 
-    // 主动清除配置相关 Redis 缓存
     deleteCachePattern('cache:configs:*').catch(() => {});
 
     return NextResponse.json({
       success: true,
-      data: { ...updated, _id: updated?._id.toString() },
+      data: { ...updated, _id: updated?._id?.toString() },
       message: '配置更新成功',
     });
   } catch (error: any) {
@@ -371,13 +367,12 @@ export async function DELETE(request: NextRequest) {
     }
 
     const collection = await getConfigsCollection();
-    const result = await collection.deleteOne({ _id: objectId });
+    const result = await collection.deleteOne({ _id: objectId as any });
 
     if (result.deletedCount === 0) {
       return NextResponse.json({ success: false, error: '未找到指定配置或已被删除' }, { status: 404 });
     }
 
-    // 主动清除配置相关 Redis 缓存
     deleteCachePattern('cache:configs:*').catch(() => {});
 
     return NextResponse.json({

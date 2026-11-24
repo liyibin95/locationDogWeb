@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
           newlyReadCount++;
           try {
             await messagesCollection.updateOne(
-              { _id: new ObjectId(mid) },
+              { _id: new ObjectId(mid) as any },
               { $inc: { readCount: 1 } }
             );
           } catch {

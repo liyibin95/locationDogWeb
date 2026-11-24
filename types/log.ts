@@ -44,11 +44,22 @@ export interface LogListResponse {
   error?: string;
 }
 
+export interface ServiceStat {
+  name: string;
+  count: number;
+}
+
 export interface LogStats {
   total: number;
   info: number;
   warn: number;
   error: number;
   debug: number;
-  services: { name: string; count: number }[];
+  services: ServiceStat[];
+}
+
+export interface LogStatsResponse {
+  success: boolean;
+  data: LogStats;
+  error?: string;
 }
