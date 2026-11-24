@@ -224,36 +224,187 @@ curl -X DELETE "https://your-domain.vercel.app/api/logs" \
 
 ---
 
+## ⚙️ 配置中心 (Remote Config - 专为 Android App 打造)
+
+面向 Android 应用的动态配置下发与功能开关 (Feature Flags) 服务。支持按**包名 (`appId`)**、**环境 (`prod`/`beta`/`dev`)**、**渠道 (`channel`)** 及**版本号区间 (`minVersionCode`/`maxVersionCode`)** 精细化灰度与生效。
+
+### 1. Android 客户端拉取配置 (`GET /api/configs/client`)
+
+客户端启动或后台轮询时调用，自动按特定包名、环境与版本优先级智能合并并直接返回类型转换后的键值对。
+
+```bash
+curl "https://your-domain.vercel.app/api/configs/client?appId=com.example.app&env=prod&versionCode=102&channel=googleplay"
+```
+
+#### 客户端响应数据 (JSON)
+```json
+{
+  "success": true,
+  "appId": "com.example.app",
+  "environment": "prod",
+  "configs": {
+    "network_base_url": "https://api.example.com",
+    "feature_dark_mode": true,
+    "max_retry_times": 3,
+    "upgrade_policy": {
+      "minSupportedVersion": 100,
+      "latestVersion": 105,
+      "forceUpdate": false
+    }
+  },
+  "version": 1732435200000,
+  "count": 4
+}
+```
+
+### 2. 配置管理接口 (CRUD)
+
+- `GET /api/configs`: 管理员查询配置列表（支持按关键词、分组、应用包名、环境筛选和分页）
+- `POST /api/configs`: 创建新配置（需鉴权）
+- `PUT /api/configs`: 更新配置内容或一键启/停用（需鉴权）
+- `DELETE /api/configs?id=<ID>`: 删除指定配置（需鉴权）
+
+---
+
+## 📬 消息中心 (Message Center - 专为 Android App 打造)
+
+面向 Android 应用统一发布**系统维护公告 (Announcement)**、**通知消息 (Notification)**、**版本升级提示 (Upgrade)** 及**紧急告警 (Alert)**，支持启动强弹窗浮层以及精准的已读/未读状态追踪。
+
+### 1. Android 客户端获取消息 (`GET /api/messages/client`)
+
+```bash
+curl "https://your-domain.vercel.app/api/messages/client?appId=com.example.app&userId=user_1001&versionCode=102&channel=official"
+```
+
+#### 客户端响应数据 (JSON)
+```json
+{
+  "success": true,
+  "unreadCount": 1,
+  "popupMessage": {
+    "_id": "6743210abcdef12345678901",
+    "title": "重要维护升级通知",
+    "content": "我们将于今晚 02:00 进行云服务升级维护，预计耗时 1 小时。",
+    "type": "announcement",
+    "priority": "high",
+    "isPopup": true,
+    "actionUrl": "https://example.com/notice/1",
+    "actionText": "查看详情"
+  },
+  "data": [
+    {
+      "_id": "6743210abcdef12345678901",
+      "title": "重要维护升级通知",
+      "content": "我们将于今晚 02:00 进行云服务升级维护...",
+      "type": "announcement",
+      "priority": "high",
+      "isPopup": true,
+      "actionUrl": "https://example.com/notice/1",
+      "actionText": "查看详情",
+      "isRead": false,
+      "publishAt": "2026-11-24T08:00:00.000Z"
+    }
+  ]
+}
+```
+
+### 2. 标记消息为已读 (`POST /api/messages/read`)
+
+```bash
+curl -X POST "https://your-domain.vercel.app/api/messages/read" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": "user_1001",
+    "messageId": "6743210abcdef12345678901"
+  }'
+```
+
+### 3. 消息管理接口 (CRUD) 与 Markdown 富文本
+
+- `GET /api/messages`: 管理员查询消息列表（支持按类型、优先级、状态筛选和分页）
+- `POST /api/messages`: 新建/发布消息或公告（需鉴权）
+- `PUT /api/messages`: 编辑消息正文、跳转动作或切换草稿/发布状态（需鉴权）
+- `DELETE /api/messages?id=<ID>`: 删除消息（需鉴权）
+- `POST /api/upload`: 上传大于 64KB 图片至 **Vercel Blob Store**，返回全球加速 CDN URL
+
+#### 🖼️ 富文本图片双轨存储策略
+消息公告正文全面支持 Markdown 语法与图片插入（支持直接 `Ctrl+V` 粘贴剪贴板截图、拖拽图片文件或工具栏按钮选择）：
+- **小图 (≤ 64 KB)**：自动转为 **Base64 Data URI** 内联嵌入，零额外网络请求、免占用云存储配额。
+- **大图 (> 64 KB)**：自动异步上传至 **Vercel Blob Store** 并以 CDN 链接插入；如未配置 Vercel Blob Token，可一键降级为 Base64 嵌入，保障业务不中断。
+
+---
+
 ## 🛠️ 项目目录结构
 
 ```
 next-log/
 ├── app/
 │   ├── api/
-│   │   └── logs/
-│   │       ├── route.ts          # GET (查询日志) & POST (新增日志，带鉴权)
-│   │       └── stats/
-│   │           └── route.ts      # GET (统计卡片数据聚合)
-│   ├── globals.css               # 全局样式与暗黑主题
-│   ├── layout.tsx                # 根布局
-│   └── page.tsx                  # 日志控制台主界面
+│   │   ├── auth/             # 页面登录/鉴权接口
+│   │   ├── logs/             # 日志相关接口 (采集、查询、统计)
+│   │   ├── configs/          # 配置中心接口 (管理 CRUD、统计)
+│   │   │   └── client/       # Android 客户端专用配置同步接口
+│   │   ├── upload/           # 图片上传接口 (Vercel Blob 集成)
+│   │   └── messages/         # 消息中心接口 (管理 CRUD、统计)
+│   │       ├── client/       # Android 客户端专用拉取消息与弹窗接口
+│   │       └── read/         # 客户端标记消息已读接口
+│   ├── configs/              # 配置中心前端管理看板
+│   ├── messages/             # 消息中心前端管理看板
+│   │   └── create/           # 消息公告沉浸式 Markdown 编辑与实时双栏预览独立路由
+│   ├── login/                # 页面登录界面
+│   ├── globals.css           # 全局样式与暗黑主题
+│   ├── layout.tsx            # 根布局
+│   └── page.tsx              # 日志管理控制台主界面
 ├── components/
-│   ├── Navbar.tsx                # 顶部导航、刷新、API Key 与文档入口
-│   ├── StatsOverview.tsx         # 统计卡片组件
-│   ├── LogFilterBar.tsx          # 搜索、级别、服务及时间筛选器
-│   ├── LogTable.tsx              # 日志数据列表、展开详情及分页
-│   ├── CreateLogModal.tsx        # 新增日志与鉴权调试弹窗
-│   └── ApiDocModal.tsx           # 接口调用指南与部署说明
+│   ├── AdminLayout.tsx       # 后台管理系统主布局 (左侧可收缩菜单 + 顶部快捷栏)
+│   ├── MarkdownRenderer.tsx  # 轻量级 Markdown 富文本与图片渲染组件
+│   ├── configs/              # 配置中心组件 (卡片、表格、编辑弹窗、Android指南)
+│   ├── messages/             # 消息中心组件 (卡片、表格、真机预览、Android指南)
+│   ├── LogTable.tsx          # 日志表格及详情展示
+│   ├── LogFilterBar.tsx      # 日志多维筛选
+│   ├── StatsOverview.tsx     # 日志统计看板
+│   └── ApiDocModal.tsx       # 全功能统一 API 文档与 Android SDK 演示
 ├── lib/
-│   ├── auth.ts                   # 接口鉴权中间件 (API Key 校验)
-│   └── mongodb.ts                # MongoDB 客户端单例与自动索引管理
+│   ├── auth.ts               # 接口鉴权中间件 (API Key 校验)
+│   ├── image-uploader.ts     # 图片尺寸判断与 Base64 / Vercel Blob 智能存储策略
+│   ├── mongodb.ts            # MongoDB 连接池及日志/配置/消息索引管理
+│   └── page-auth.ts          # 页面密码 Cookie 会话保护
 ├── types/
-│   └── log.ts                    # TypeScript 类型定义
-├── .env.example                  # 环境变量配置模板
-├── .env.local                    # 本地环境变量
+│   ├── log.ts                # 日志相关 TypeScript 定义
+│   ├── config.ts             # 配置中心 TypeScript 定义
+│   └── message.ts            # 消息中心 TypeScript 定义
+├── middleware.ts             # Next.js 路由保护与 API 白名单中间件
 ├── package.json
-├── tailwind.config.ts
-└── tsconfig.json
+└── tailwind.config.ts
+```
+│   │   └── messages/         # 消息中心接口 (管理 CRUD、统计)
+│   │       ├── client/       # Android 客户端专用拉取消息与弹窗接口
+│   │       └── read/         # 客户端标记消息已读接口
+│   ├── configs/              # 配置中心前端管理看板
+│   ├── messages/             # 消息中心前端管理看板
+│   ├── login/                # 页面登录界面
+│   ├── globals.css           # 全局样式与暗黑主题
+│   ├── layout.tsx            # 根布局
+│   └── page.tsx              # 日志管理控制台主界面
+├── components/
+│   ├── Navbar.tsx            # 统一顶部导航栏 (日志 · 配置 · 消息联动)
+│   ├── configs/              # 配置中心组件 (卡片、表格、编辑弹窗、Android指南)
+│   ├── messages/             # 消息中心组件 (卡片、表格、编辑弹窗、真机预览、Android指南)
+│   ├── LogTable.tsx          # 日志表格及详情展示
+│   ├── LogFilterBar.tsx      # 日志多维筛选
+│   ├── StatsOverview.tsx     # 日志统计看板
+│   └── ApiDocModal.tsx       # 全功能统一 API 文档与 Android SDK 演示
+├── lib/
+│   ├── auth.ts               # 接口鉴权中间件 (API Key 校验)
+│   ├── mongodb.ts            # MongoDB 连接池及日志/配置/消息索引管理
+│   └── page-auth.ts          # 页面密码 Cookie 会话保护
+├── types/
+│   ├── log.ts                # 日志相关 TypeScript 定义
+│   ├── config.ts             # 配置中心 TypeScript 定义
+│   └── message.ts            # 消息中心 TypeScript 定义
+├── middleware.ts             # Next.js 路由保护与 API 白名单中间件
+├── package.json
+└── tailwind.config.ts
 ```
 
 ---

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Check, Copy, Database, ShieldCheck, Terminal, X } from 'lucide-react';
+import { Check, Copy, Database, ShieldCheck, Terminal, X, Smartphone } from 'lucide-react';
 
 interface ApiDocModalProps {
   isOpen: boolean;
@@ -14,14 +14,104 @@ export const ApiDocModal: React.FC<ApiDocModalProps> = ({
   onClose,
   apiKey,
 }) => {
-  const [activeTab, setActiveTab] = useState<'curl' | 'js' | 'python' | 'vercel'>('curl');
+  const [activeTab, setActiveTab] = useState<'android' | 'curl' | 'configs' | 'messages' | 'js' | 'python' | 'vercel'>('android');
   const [copied, setCopied] = useState(false);
 
   if (!isOpen) return null;
 
-  const currentKey = apiKey || 'your-secret-api-key';
+  const currentKey = apiKey || 'next-log-secret-key-2026';
 
   const snippets = {
+    android: `// ==========================================
+// Android (Kotlin) 统一调用指南
+// ==========================================
+
+// 1. 配置中心 (Remote Config): 启动时拉取配置并生效
+val configUrl = "http://localhost:3000/api/configs/client?appId=com.example.app&env=prod&versionCode=101&channel=googleplay"
+// 返回直接解析好的键值对 JSON:
+// { "success": true, "configs": { "feature_dark_mode": true, "max_retry": 3, "api_host": "..." } }
+
+// 2. 消息与公告中心 (Message Center): 拉取最新通知与启动弹窗
+val messageUrl = "http://localhost:3000/api/messages/client?appId=com.example.app&userId=user_1001&versionCode=101"
+// 返回消息列表及启动弹窗 popupMessage:
+// { "success": true, "unreadCount": 1, "popupMessage": { "title": "升级通知", ... }, "data": [...] }
+
+// 3. 消息标记已读 (HTTP POST):
+// URL: http://localhost:3000/api/messages/read
+// Body: { "userId": "user_1001", "messageId": "65b0f..." }
+
+// 4. 日志中心上报 (Log Center HTTP POST):
+// URL: http://localhost:3000/api/logs
+// Header: x-api-key: ${currentKey}
+// Body: { "level": "info", "service": "android-app", "message": "应用冷启动完成", "details": { "device": "Pixel 7" } }`,
+
+    configs: `# ==========================================
+# 配置中心 (Remote Config) API 接口
+# ==========================================
+
+# 1. Android 客户端拉取配置 (公开接口，按包名/环境/版本号智能合并)
+curl "http://localhost:3000/api/configs/client?appId=com.example.app&env=prod&versionCode=101&channel=googleplay"
+
+# 2. 管理员查询配置列表 (带分页与搜索)
+curl "http://localhost:3000/api/configs?group=network&page=1&limit=20"
+
+# 3. 创建新配置项 (需鉴权)
+curl -X POST "http://localhost:3000/api/configs" \\
+  -H "Content-Type: application/json" \\
+  -H "x-api-key: ${currentKey}" \\
+  -d '{
+    "key": "feature_new_ui",
+    "description": "控制新首页UI灰度",
+    "type": "boolean",
+    "value": "true",
+    "group": "feature_toggle",
+    "appId": "com.example.app",
+    "environment": "prod",
+    "isEnabled": true
+  }'
+
+# 4. 更新配置项 (需鉴权)
+curl -X PUT "http://localhost:3000/api/configs" \\
+  -H "Content-Type: application/json" \\
+  -H "x-api-key: ${currentKey}" \\
+  -d '{
+    "_id": "<CONFIG_ID>",
+    "value": "false",
+    "isEnabled": false
+  }'`,
+
+    messages: `# ==========================================
+# 消息中心 (Message Center) API 接口
+# ==========================================
+
+# 1. Android 客户端获取未读消息与启动弹窗
+curl "http://localhost:3000/api/messages/client?appId=com.example.app&userId=user_888&versionCode=105&channel=official"
+
+# 2. 客户端标记消息为已读
+curl -X POST "http://localhost:3000/api/messages/read" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "userId": "user_888",
+    "messageId": "<MESSAGE_ID>"
+  }'
+
+# 3. 创建/发布新公告或更新提示 (需鉴权)
+curl -X POST "http://localhost:3000/api/messages" \\
+  -H "Content-Type: application/json" \\
+  -H "x-api-key: ${currentKey}" \\
+  -d '{
+    "title": "版本更新提示 v2.5.0",
+    "content": "全新暗黑模式与流畅动画现已上线！",
+    "type": "upgrade",
+    "priority": "high",
+    "targetType": "all",
+    "appId": "com.example.app",
+    "isPopup": true,
+    "actionUrl": "https://example.com/download/app.apk",
+    "actionText": "立即升级",
+    "status": "published"
+  }'`,
+
     curl: `# 1. 新增日志（需携带 x-api-key 或 Authorization 进行鉴权）
 curl -X POST "http://localhost:3000/api/logs" \\
   -H "Content-Type: application/json" \\
@@ -43,15 +133,7 @@ curl "http://localhost:3000/api/logs?level=error&search=订单&page=1&limit=20"
 
 # 3. 删除单条日志（需鉴权）
 curl -X DELETE "http://localhost:3000/api/logs?id=<LOG_ID>" \\
-  -H "x-api-key: ${currentKey}"
-
-# 4. 批量删除日志（需鉴权）
-curl -X DELETE "http://localhost:3000/api/logs" \\
-  -H "Content-Type: application/json" \\
-  -H "x-api-key: ${currentKey}" \\
-  -d '{
-    "ids": ["<LOG_ID_1>", "<LOG_ID_2>"]
-  }'`,
+  -H "x-api-key: ${currentKey}"`,
 
     js: `// Node.js / Browser (Fetch API)
 async function sendLog() {
@@ -59,7 +141,7 @@ async function sendLog() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': '${currentKey}', // 鉴权 Header
+      'x-api-key': '${currentKey}',
     },
     body: JSON.stringify({
       level: 'error',
@@ -68,8 +150,7 @@ async function sendLog() {
       tags: ['payment', 'timeout'],
       details: {
         gateway: 'wechat_pay',
-        retryCount: 3,
-        errorStack: 'TimeoutError: Connection timed out after 5000ms'
+        retryCount: 3
       }
     })
   });
@@ -126,7 +207,7 @@ print("Response:", response.json())`,
         <div className="flex items-center justify-between border-b border-slate-800 pb-4">
           <div className="flex items-center space-x-2">
             <Terminal className="h-5 w-5 text-indigo-400" />
-            <h3 className="text-base font-bold text-white">API 调用与部署说明</h3>
+            <h3 className="text-base font-bold text-white">API 调用与 Android 对接说明</h3>
           </div>
           <button
             onClick={onClose}
@@ -138,40 +219,42 @@ print("Response:", response.json())`,
 
         {/* Feature Highlights */}
         <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-          <div className="flex items-start space-x-2 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
-            <ShieldCheck className="h-4 w-4 text-emerald-400 flex-shrink-0 mt-0.5" />
+          <div className="flex items-start space-x-2 rounded-xl border border-indigo-500/20 bg-indigo-500/5 p-3">
+            <Smartphone className="h-4 w-4 text-indigo-400 flex-shrink-0 mt-0.5" />
             <div>
-              <span className="font-semibold text-emerald-400">接口鉴权规范 (Auth)</span>
+              <span className="font-semibold text-indigo-400">Android App 专属支持</span>
               <p className="mt-0.5 text-slate-400">
-                新增日志要求携带 <code className="text-white">x-api-key</code> 或{' '}
-                <code className="text-white">Authorization: Bearer &lt;KEY&gt;</code> 请求头，验证未通过直接拒绝写入并返回 401。
+                配置中心支持按应用包名、环境及版本号动态下发；消息中心支持启动弹窗与已读状态。
               </p>
             </div>
           </div>
-          <div className="flex items-start space-x-2 rounded-xl border border-sky-500/20 bg-sky-500/5 p-3">
-            <Database className="h-4 w-4 text-sky-400 flex-shrink-0 mt-0.5" />
+          <div className="flex items-start space-x-2 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
+            <ShieldCheck className="h-4 w-4 text-emerald-400 flex-shrink-0 mt-0.5" />
             <div>
-              <span className="font-semibold text-sky-400">Vercel MongoDB 数据库</span>
+              <span className="font-semibold text-emerald-400">接口鉴权与安全防护</span>
               <p className="mt-0.5 text-slate-400">
-                基于官方 MongoDB 驱动并在 Serverless 环境复用连接池，自动为时间、日志级别及服务建立高效索引。
+                写接口强制校验 <code className="text-white">x-api-key</code> 或 Session 会话，读接口专为移动端低延迟缓存设计。
               </p>
             </div>
           </div>
         </div>
 
         {/* Tabs */}
-        <div className="mt-4 flex items-center justify-between border-b border-slate-800">
+        <div className="mt-4 flex items-center justify-between border-b border-slate-800 overflow-x-auto">
           <div className="flex space-x-1">
             {[
-              { id: 'curl', label: 'cURL' },
-              { id: 'js', label: 'JavaScript' },
+              { id: 'android', label: 'Android 对接' },
+              { id: 'configs', label: '配置中心 API' },
+              { id: 'messages', label: '消息中心 API' },
+              { id: 'curl', label: '日志 cURL' },
+              { id: 'js', label: 'JS / TS' },
               { id: 'python', label: 'Python' },
-              { id: 'vercel', label: 'Vercel 部署说明' },
+              { id: 'vercel', label: 'Vercel 部署' },
             ].map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`px-3 py-2 text-xs font-medium transition border-b-2 ${
+                className={`px-3 py-2 text-xs font-medium whitespace-nowrap transition border-b-2 ${
                   activeTab === tab.id
                     ? 'border-indigo-500 text-indigo-400'
                     : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -184,7 +267,7 @@ print("Response:", response.json())`,
 
           <button
             onClick={() => copyToClipboard(snippets[activeTab])}
-            className="flex items-center space-x-1 text-xs text-slate-400 hover:text-white pb-2"
+            className="flex items-center space-x-1 text-xs text-slate-400 hover:text-white pb-2 whitespace-nowrap"
           >
             {copied ? (
               <>

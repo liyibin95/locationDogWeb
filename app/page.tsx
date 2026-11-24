@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { Navbar } from '@/components/Navbar';
+import { AdminLayout } from '@/components/AdminLayout';
 import { StatsOverview } from '@/components/StatsOverview';
 import { LogFilterBar } from '@/components/LogFilterBar';
 import { LogTable } from '@/components/LogTable';
@@ -178,91 +178,84 @@ export default function Home() {
   const availableServices = stats?.services.map((s) => s.name) || [];
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col">
-      {/* Top Navigation */}
-      <Navbar
-        onOpenCreate={() => setIsCreateOpen(true)}
-        onOpenApiDocs={() => setIsApiDocsOpen(true)}
-        apiKey={apiKey}
-        onUpdateApiKey={handleUpdateApiKey}
-        onRefresh={() => {
-          fetchLogs(pagination.page);
-          fetchStats();
-        }}
-        isLoading={isLoading}
+    <AdminLayout
+      title="日志中心"
+      subtitle="多维度分布式日志查询、实时采集统计与健康监控"
+      breadcrumbs={[{ label: '日志中心' }]}
+      onOpenCreate={() => setIsCreateOpen(true)}
+      createButtonText="新增日志"
+      onOpenApiDocs={() => setIsApiDocsOpen(true)}
+      apiKey={apiKey}
+      onUpdateApiKey={handleUpdateApiKey}
+      onRefresh={() => {
+        fetchLogs(pagination.page);
+        fetchStats();
+      }}
+      isLoading={isLoading}
+    >
+      {/* Success toast banner */}
+      {successToast && (
+        <div className="flex items-center space-x-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-300">
+          <CheckCircle2 className="h-4 w-4 text-emerald-400 flex-shrink-0" />
+          <span>{successToast}</span>
+        </div>
+      )}
+
+      {/* Error notification banner if DB is not connected or error occurred */}
+      {errorMessage && (
+        <div className="flex items-start justify-between rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-xs text-rose-300">
+          <div className="flex items-center space-x-2">
+            <AlertCircle className="h-4 w-4 text-rose-400 flex-shrink-0" />
+            <div>
+              <span className="font-semibold">提示信息：</span>
+              <span>{errorMessage}</span>
+            </div>
+          </div>
+          <button
+            onClick={() => setIsApiDocsOpen(true)}
+            className="flex items-center space-x-1 underline text-rose-300 hover:text-white"
+          >
+            <span>查看配置指南</span>
+            <ExternalLink className="h-3 w-3" />
+          </button>
+        </div>
+      )}
+
+      {/* Stats Overview */}
+      <StatsOverview
+        stats={stats}
+        currentLevel={level}
+        onSelectLevel={(lvl) => setLevel(lvl)}
       />
 
-      {/* Main Content Area */}
-      <main className="flex-1 mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-6">
-        {/* Success toast banner */}
-        {successToast && (
-          <div className="flex items-center space-x-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-300">
-            <CheckCircle2 className="h-4 w-4 text-emerald-400 flex-shrink-0" />
-            <span>{successToast}</span>
-          </div>
-        )}
+      {/* Filter Bar */}
+      <LogFilterBar
+        search={search}
+        onSearchChange={setSearch}
+        level={level}
+        onLevelChange={setLevel}
+        service={service}
+        onServiceChange={setService}
+        startDate={startDate}
+        endDate={endDate}
+        onDateChange={(start, end) => {
+          setStartDate(start);
+          setEndDate(end);
+        }}
+        onReset={handleResetFilters}
+        availableServices={availableServices}
+      />
 
-        {/* Error notification banner if DB is not connected or error occurred */}
-        {errorMessage && (
-          <div className="flex items-start justify-between rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-xs text-rose-300">
-            <div className="flex items-center space-x-2">
-              <AlertCircle className="h-4 w-4 text-rose-400 flex-shrink-0" />
-              <div>
-                <span className="font-semibold">提示信息：</span>
-                <span>{errorMessage}</span>
-              </div>
-            </div>
-            <button
-              onClick={() => setIsApiDocsOpen(true)}
-              className="flex items-center space-x-1 underline text-rose-300 hover:text-white"
-            >
-              <span>查看配置指南</span>
-              <ExternalLink className="h-3 w-3" />
-            </button>
-          </div>
-        )}
-
-        {/* Stats Overview */}
-        <StatsOverview
-          stats={stats}
-          currentLevel={level}
-          onSelectLevel={(lvl) => setLevel(lvl)}
-        />
-
-        {/* Filter Bar */}
-        <LogFilterBar
-          search={search}
-          onSearchChange={setSearch}
-          level={level}
-          onLevelChange={setLevel}
-          service={service}
-          onServiceChange={setService}
-          startDate={startDate}
-          endDate={endDate}
-          onDateChange={(start, end) => {
-            setStartDate(start);
-            setEndDate(end);
-          }}
-          onReset={handleResetFilters}
-          availableServices={availableServices}
-        />
-
-        {/* Log Table / List */}
-        <LogTable
-          logs={logs}
-          pagination={pagination}
-          onPageChange={(p) => fetchLogs(p)}
-          isLoading={isLoading}
-          onOpenCreate={() => setIsCreateOpen(true)}
-          onDeleteLog={handleDeleteLog}
-          onBatchDelete={handleBatchDelete}
-        />
-      </main>
-
-      {/* Footer */}
-      <footer className="border-t border-slate-900 bg-slate-950 py-4 text-center text-xs text-slate-500">
-        NextLog &copy; {new Date().getFullYear()} - 基于 Next.js 与 Vercel MongoDB 构建
-      </footer>
+      {/* Log Table / List */}
+      <LogTable
+        logs={logs}
+        pagination={pagination}
+        onPageChange={(p) => fetchLogs(p)}
+        isLoading={isLoading}
+        onOpenCreate={() => setIsCreateOpen(true)}
+        onDeleteLog={handleDeleteLog}
+        onBatchDelete={handleBatchDelete}
+      />
 
       {/* Modals */}
       <CreateLogModal
@@ -280,6 +273,6 @@ export default function Home() {
         onClose={() => setIsApiDocsOpen(false)}
         apiKey={apiKey}
       />
-    </div>
+    </AdminLayout>
   );
 }

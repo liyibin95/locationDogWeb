@@ -9,6 +9,9 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/login') ||
     pathname.startsWith('/api/auth') ||
     pathname.startsWith('/api/logs') || // 日志 API 自身具备独立 API Key 鉴权机制
+    pathname.startsWith('/api/configs') || // 配置中心 API 具备鉴权机制与客户端接口
+    pathname.startsWith('/api/messages') || // 消息中心 API 具备鉴权机制与客户端接口
+    pathname.startsWith('/api/upload') || // 上传接口具备独立鉴权机制
     pathname.startsWith('/_next') ||
     pathname.startsWith('/favicon.ico')
   ) {

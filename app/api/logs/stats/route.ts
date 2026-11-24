@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getLogsCollection } from '@/lib/mongodb';
+import { getOrSetCache } from '@/lib/redis';
 
 export const dynamic = 'force-dynamic';
 
@@ -8,51 +9,59 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET() {
   try {
-    const collection = await getLogsCollection();
+    const stats = await getOrSetCache(
+      'cache:logs:stats',
+      async () => {
+        const collection = await getLogsCollection();
 
-    const [total, levelStats, services] = await Promise.all([
-      collection.countDocuments(),
-      collection
-        .aggregate([
-          {
-            $group: {
-              _id: '$level',
-              count: { $sum: 1 },
-            },
-          },
-        ])
-        .toArray(),
-      collection
-        .aggregate([
-          {
-            $group: {
-              _id: '$service',
-              count: { $sum: 1 },
-            },
-          },
-          { $sort: { count: -1 } },
-          { $limit: 10 },
-        ])
-        .toArray(),
-    ]);
+        const [total, levelStats, services] = await Promise.all([
+          collection.countDocuments(),
+          collection
+            .aggregate([
+              {
+                $group: {
+                  _id: '$level',
+                  count: { $sum: 1 },
+                },
+              },
+            ])
+            .toArray(),
+          collection
+            .aggregate([
+              {
+                $group: {
+                  _id: '$service',
+                  count: { $sum: 1 },
+                },
+              },
+              { $sort: { count: -1 } },
+              { $limit: 10 },
+            ])
+            .toArray(),
+        ]);
 
-    const stats = {
-      total,
-      info: 0,
-      warn: 0,
-      error: 0,
-      debug: 0,
-      services: services.map((s) => ({
-        name: s._id || 'unknown',
-        count: s.count,
-      })),
-    };
+        const res = {
+          total,
+          info: 0,
+          warn: 0,
+          error: 0,
+          debug: 0,
+          services: services.map((s) => ({
+            name: s._id || 'unknown',
+            count: s.count,
+          })),
+        };
 
-    levelStats.forEach((item) => {
-      if (item._id in stats) {
-        (stats as any)[item._id] = item.count;
-      }
-    });
+        levelStats.forEach((item) => {
+          if (item._id in res) {
+            (res as any)[item._id] = item.count;
+          }
+        });
+
+        return res;
+      },
+      30
+    );
 
     return NextResponse.json({
       success: true,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getLogsCollection } from '@/lib/mongodb';
 import { validateApiKey, validateAdminOrApiKey } from '@/lib/auth';
+import { getOrSetCache, deleteCachePattern } from '@/lib/redis';
 import { LogDocument, LogLevel } from '@/types/log';
 import { Filter, ObjectId } from 'mongodb';
 
@@ -24,77 +25,86 @@ export async function GET(request: NextRequest) {
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
 
-    const filter: Filter<LogDocument> = {};
+    const cacheKey = `cache:logs:list:${page}:${limit}:${level || 'all'}:${service || 'all'}:${search || ''}:${startDate || ''}:${endDate || ''}`;
 
-    // 级别筛选
-    if (level && level !== 'all' && VALID_LEVELS.includes(level as LogLevel)) {
-      filter.level = level as LogLevel;
-    }
+    // 日志列表设置 10 秒轻量缓存，降低频繁翻页或多人查看时对 MongoDB 的重复击穿
+    const responseData = await getOrSetCache(
+      cacheKey,
+      async () => {
+        const filter: Filter<LogDocument> = {};
 
-    // 服务名筛选
-    if (service) {
-      filter.service = service;
-    }
-
-    // 关键词搜索（对消息内容和服务名进行模糊搜索）
-    if (search) {
-      filter.$or = [
-        { message: { $regex: search, $options: 'i' } },
-        { service: { $regex: search, $options: 'i' } },
-      ];
-    }
-
-    // 时间范围筛选
-    if (startDate || endDate) {
-      filter.createdAt = {};
-      if (startDate) {
-        const start = new Date(startDate);
-        if (!isNaN(start.getTime())) {
-          filter.createdAt.$gte = start;
+        // 级别筛选
+        if (level && level !== 'all' && VALID_LEVELS.includes(level as LogLevel)) {
+          filter.level = level as LogLevel;
         }
-      }
-      if (endDate) {
-        const end = new Date(endDate);
-        if (!isNaN(end.getTime())) {
-          // 如果传入的是 YYYY-MM-DD，调整为当天最后一刻
-          if (endDate.length === 10) {
-            end.setHours(23, 59, 59, 999);
+
+        // 服务名筛选
+        if (service) {
+          filter.service = service;
+        }
+
+        // 关键词搜索（对消息内容和服务名进行模糊搜索）
+        if (search) {
+          filter.$or = [
+            { message: { $regex: search, $options: 'i' } },
+            { service: { $regex: search, $options: 'i' } },
+          ];
+        }
+
+        // 时间范围筛选
+        if (startDate || endDate) {
+          filter.createdAt = {};
+          if (startDate) {
+            const start = new Date(startDate);
+            if (!isNaN(start.getTime())) {
+              filter.createdAt.$gte = start;
+            }
           }
-          filter.createdAt.$lte = end;
+          if (endDate) {
+            const end = new Date(endDate);
+            if (!isNaN(end.getTime())) {
+              if (endDate.length === 10) {
+                end.setHours(23, 59, 59, 999);
+              }
+              filter.createdAt.$lte = end;
+            }
+          }
         }
-      }
-    }
 
-    const collection = await getLogsCollection();
+        const collection = await getLogsCollection();
 
-    const [total, logs] = await Promise.all([
-      collection.countDocuments(filter),
-      collection
-        .find(filter)
-        .sort({ createdAt: -1 })
-        .skip((page - 1) * limit)
-        .limit(limit)
-        .toArray(),
-    ]);
+        const [total, logs] = await Promise.all([
+          collection.countDocuments(filter),
+          collection
+            .find(filter)
+            .sort({ createdAt: -1 })
+            .skip((page - 1) * limit)
+            .limit(limit)
+            .toArray(),
+        ]);
 
-    const totalPages = Math.ceil(total / limit) || 1;
+        const totalPages = Math.ceil(total / limit) || 1;
 
-    // 格式化输出 _id 为字符串
-    const formattedLogs = logs.map((log) => ({
-      ...log,
-      _id: log._id?.toString(),
-    }));
+        const formattedLogs = logs.map((log) => ({
+          ...log,
+          _id: log._id?.toString(),
+        }));
 
-    return NextResponse.json({
-      success: true,
-      data: formattedLogs,
-      pagination: {
-        total,
-        page,
-        limit,
-        totalPages,
+        return {
+          success: true,
+          data: formattedLogs,
+          pagination: {
+            total,
+            page,
+            limit,
+            totalPages,
+          },
+        };
       },
-    });
+      10
+    );
+
+    return NextResponse.json(responseData);
   } catch (error: any) {
     console.error('Error fetching logs:', error);
     return NextResponse.json(
@@ -198,8 +208,6 @@ export async function POST(request: NextRequest) {
 
 /**
  * DELETE /api/logs - 删除日志（支持单条或批量删除）
- * 支持通过 Body { ids: string[] } 或 Query 参数 ?id=xxx 删除
- * 鉴权校验：通过页面登录 Cookie 或 API Key
  */
 export async function DELETE(request: NextRequest) {
   // 1. 鉴权校验
@@ -273,6 +281,9 @@ export async function DELETE(request: NextRequest) {
       _id: { $in: objectIds as any },
     });
 
+    // 删除日志后异步清除缓存
+    deleteCachePattern('cache:logs:*').catch(() => {});
+
     return NextResponse.json({
       success: true,
       message: `成功删除 ${result.deletedCount} 条日志`,
@@ -289,4 +300,3 @@ export async function DELETE(request: NextRequest) {
     );
   }
 }
-
