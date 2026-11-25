@@ -74,13 +74,11 @@ export async function GET(request: NextRequest) {
         const collection = await getDevicesCollection();
 
         // 排序规则
-        const sortOptions: Sort = {};
+        let sortOptions: Sort = { createdAt: sortOrder as any };
         if (sortBy === 'points') {
-          sortOptions.points = sortOrder;
+          sortOptions = { points: sortOrder as any };
         } else if (sortBy === 'updatedAt') {
-          sortOptions.updatedAt = sortOrder;
-        } else {
-          sortOptions.createdAt = sortOrder;
+          sortOptions = { updatedAt: sortOrder as any };
         }
 
         const [total, devices] = await Promise.all([

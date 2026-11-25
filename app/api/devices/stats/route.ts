@@ -25,7 +25,7 @@ export async function GET() {
         ] = await Promise.all([
           collection.countDocuments(),
           collection.countDocuments({
-            wechatId: { $exists: true, $nin: ['', null] },
+            wechatId: { $exists: true, $nin: ['', null as any] },
           }),
           collection.countDocuments({ status: 'normal' }),
           collection.countDocuments({ status: 'disabled' }),
