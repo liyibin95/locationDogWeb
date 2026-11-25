@@ -2,6 +2,7 @@ import { MongoClient, Db, Collection } from 'mongodb';
 import { LogDocument } from '@/types/log';
 import { ConfigDocument } from '@/types/config';
 import { MessageDocument, MessageReadDocument } from '@/types/message';
+import { DeviceDocument } from '@/types/device';
 
 const uri = process.env.MONGODB_URI || '';
 const dbName = process.env.MONGODB_DB || 'next_log';
@@ -143,6 +144,33 @@ export async function getMessageReadsCollection(): Promise<Collection<MessageRea
       messageReadIndexesCreated = true;
     } catch {
       messageReadIndexesCreated = true;
+    }
+  }
+
+  return collection;
+}
+
+/**
+ * 获取 devices 集合（Android 设备管理），并确保索引存在
+ */
+let deviceIndexesCreated = false;
+
+export async function getDevicesCollection(): Promise<Collection<DeviceDocument>> {
+  const db = await getDatabase();
+  const collection = db.collection<DeviceDocument>('devices');
+
+  if (!deviceIndexesCreated) {
+    try {
+      await Promise.all([
+        collection.createIndex({ deviceId: 1 }, { unique: true }),
+        collection.createIndex({ wechatId: 1 }),
+        collection.createIndex({ createdAt: -1 }),
+        collection.createIndex({ points: -1 }),
+        collection.createIndex({ status: 1 }),
+      ]);
+      deviceIndexesCreated = true;
+    } catch {
+      deviceIndexesCreated = true;
     }
   }
 

@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Activity, BookOpen, Key, LogOut, Plus, RefreshCw, ScrollText, Sliders, Bell } from 'lucide-react';
+import { Activity, BookOpen, Key, LogOut, Plus, RefreshCw, ScrollText, Sliders, Bell, Smartphone } from 'lucide-react';
 
 interface NavbarProps {
   onOpenCreate?: () => void;
@@ -47,6 +47,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     { label: '日志中心', href: '/', icon: ScrollText, active: pathname === '/' },
     { label: '配置中心', href: '/configs', icon: Sliders, active: pathname.startsWith('/configs') },
     { label: '消息中心', href: '/messages', icon: Bell, active: pathname.startsWith('/messages') },
+    { label: '设备管理', href: '/devices', icon: Smartphone, active: pathname.startsWith('/devices') },
   ];
 
   return (
