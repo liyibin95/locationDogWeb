@@ -3,6 +3,8 @@ import { LogDocument } from '@/types/log';
 import { ConfigDocument } from '@/types/config';
 import { MessageDocument, MessageReadDocument } from '@/types/message';
 import { DeviceDocument } from '@/types/device';
+import { FeedbackDocument } from '@/types/feedback';
+import { AppVersionDocument } from '@/types/app-version';
 
 const uri = process.env.MONGODB_URI || '';
 const dbName = process.env.MONGODB_DB || 'next_log';
@@ -171,6 +173,61 @@ export async function getDevicesCollection(): Promise<Collection<DeviceDocument>
       deviceIndexesCreated = true;
     } catch {
       deviceIndexesCreated = true;
+    }
+  }
+
+  return collection;
+}
+
+/**
+ * 获取 feedbacks 集合（意见与建议反馈），并确保常用查询索引存在
+ */
+let feedbackIndexesCreated = false;
+
+export async function getFeedbacksCollection(): Promise<Collection<FeedbackDocument>> {
+  const db = await getDatabase();
+  const collection = db.collection<FeedbackDocument>('feedbacks');
+
+  if (!feedbackIndexesCreated) {
+    try {
+      await Promise.all([
+        collection.createIndex({ createdAt: -1 }),
+        collection.createIndex({ status: 1 }),
+        collection.createIndex({ type: 1 }),
+        collection.createIndex({ priority: 1 }),
+        collection.createIndex({ deviceId: 1 }),
+        collection.createIndex({ updatedAt: -1 }),
+      ]);
+      feedbackIndexesCreated = true;
+    } catch {
+      feedbackIndexesCreated = true;
+    }
+  }
+
+  return collection;
+}
+
+/**
+ * 获取 app_versions 集合（App 版本管理），并确保常用查询索引存在
+ */
+let appVersionIndexesCreated = false;
+
+export async function getAppVersionsCollection(): Promise<Collection<AppVersionDocument>> {
+  const db = await getDatabase();
+  const collection = db.collection<AppVersionDocument>('app_versions');
+
+  if (!appVersionIndexesCreated) {
+    try {
+      await Promise.all([
+        collection.createIndex({ appId: 1, versionCode: -1 }),
+        collection.createIndex({ appId: 1, status: 1, versionCode: -1 }),
+        collection.createIndex({ appId: 1, channel: 1, status: 1 }),
+        collection.createIndex({ createdAt: -1 }),
+        collection.createIndex({ status: 1 }),
+      ]);
+      appVersionIndexesCreated = true;
+    } catch {
+      appVersionIndexesCreated = true;
     }
   }
 

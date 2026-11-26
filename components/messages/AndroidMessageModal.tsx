@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X, Copy, Check, Smartphone, Terminal, Code2 } from 'lucide-react';
+import { X, Copy, Check, Smartphone, Terminal, Code2, Globe, Sparkles } from 'lucide-react';
 
 interface AndroidMessageModalProps {
   isOpen: boolean;
@@ -26,6 +26,141 @@ export const AndroidMessageModal: React.FC<AndroidMessageModalProps> = ({ isOpen
   const markReadCurl = `curl -X POST "https://your-domain.com/api/messages/read" \\
   -H "Content-Type: application/json" \\
   -d '{"userId": "user_1001", "messageId": "65b0f1..."}'`;
+
+  const h5UrlExamples = `// 1. 按 ID 打开指定公告详情（推荐）
+val url = "https://your-domain.com/h5/messages/65b0f1234567890abcdef123?userId=user_1001"
+
+// 2. 按固定 Key 打开公告（如开屏弹窗、用户隐私协议）
+val url = "https://your-domain.com/h5/messages?key=splash_notice&userId=user_1001"
+
+// 3. 适配原生沉浸式（隐藏 H5 顶栏、由 Android 原生提供标题栏与返回键）
+val url = "https://your-domain.com/h5/messages/65b0f1...?userId=user_1001&hideHeader=true"
+
+// 4. 指定浅色/暗色主题 (默认跟随系统自动切换)
+val url = "https://your-domain.com/h5/messages/65b0f1...?theme=dark"`;
+
+  const webViewActivityCode = `package com.example.app.ui
+
+import android.annotation.SuppressLint
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.Bundle
+import android.webkit.JavascriptInterface
+import android.webkit.WebSettings
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import androidx.appcompat.app.AppCompatActivity
+
+/**
+ * 嵌入 H5 公告页面的 Android Activity
+ * 完美支持富文本、代码高亮、多级标题、表格排版与大图点击灯箱预览
+ */
+class AnnouncementActivity : AppCompatActivity() {
+
+    private lateinit var webView: WebView
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        webView = WebView(this)
+        setContentView(webView)
+
+        setupWebView()
+
+        val noticeUrl = intent.getStringExtra(EXTRA_URL)
+            ?: "https://your-domain.com/h5/messages"
+        webView.loadUrl(noticeUrl)
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun setupWebView() {
+        val settings: WebSettings = webView.settings
+        settings.javaScriptEnabled = true
+        settings.domStorageEnabled = true
+        settings.useWideViewPort = true
+        settings.loadWithOverviewMode = true
+        settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+
+        // 注入 Android 原生 JS 桥接对象
+        webView.addJavascriptInterface(AndroidJsBridge(this), "Android")
+
+        webView.webViewClient = object : WebViewClient() {
+            override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
+                if (url == null) return false
+                // 非 http/https 自定义协议由外部 App 打开 (如 intent://, market://, weixin://)
+                return if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                    try {
+                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                        true
+                    } catch (e: Exception) {
+                        false
+                    }
+                } else {
+                    false
+                }
+            }
+        }
+    }
+
+    override fun onBackPressed() {
+        if (webView.canGoBack()) {
+            webView.goBack()
+        } else {
+            super.onBackPressed()
+        }
+    }
+
+    /**
+     * JS 交互接口：供 H5 公告页面直接触发原生事件
+     */
+    inner class AndroidJsBridge(private val context: Context) {
+
+        /**
+         * 响应底部 CTA 操作按钮或富文本内的跳转链接
+         */
+        @JavascriptInterface
+        fun onActionClick(actionUrl: String, actionText: String) {
+            runOnUiThread {
+                try {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(actionUrl))
+                    context.startActivity(intent)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        }
+
+        /**
+         * 响应 H5 顶栏返回/关闭按键
+         */
+        @JavascriptInterface
+        fun closePage() {
+            runOnUiThread {
+                finish()
+            }
+        }
+
+        /**
+         * 当用户浏览后自动上报已读时同步本地未读角标
+         */
+        @JavascriptInterface
+        fun onMessageRead(messageId: String) {
+            // 在此更新 App 内部的小红点或未读计数
+        }
+    }
+
+    companion object {
+        private const val EXTRA_URL = "extra_announcement_url"
+
+        fun start(context: Context, url: String) {
+            val intent = Intent(context, AnnouncementActivity::class.java).apply {
+                putExtra(EXTRA_URL, url)
+            }
+            context.startActivity(intent)
+        }
+    }
+}`;
 
   const jsonResponseExample = `{
   "success": true,
@@ -60,7 +195,6 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import androidx.appcompat.app.AlertDialog
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -204,37 +338,6 @@ object MessageCenterManager {
             false
         }
     }
-
-    /**
-     * 在 Android Activity 启动时弹窗展示通知
-     */
-    fun showPopupDialog(activity: Activity, userId: String, message: AppMessage) {
-        activity.runOnUiThread {
-            val builder = MaterialAlertDialogBuilder(activity)
-                .setTitle(message.title)
-                .setMessage(message.content)
-                .setNegativeButton("我知道了") { dialog, _ ->
-                    dialog.dismiss()
-                }
-
-            if (message.actionUrl.isNotEmpty()) {
-                val btnText = if (message.actionText.isNotEmpty()) message.actionText else "前往查看"
-                builder.setPositiveButton(btnText) { _, _ ->
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(message.actionUrl))
-                    activity.startActivity(intent)
-                }
-            }
-
-            builder.setOnDismissListener {
-                // 弹窗关闭后自动标记为已读
-                kotlinx.coroutines.GlobalScope.launch(Dispatchers.IO) {
-                    markAsRead(userId, message.id)
-                }
-            }
-
-            builder.show()
-        }
-    }
 }
 `;
 
@@ -250,7 +353,7 @@ object MessageCenterManager {
             <div>
               <h3 className="text-base font-semibold text-white">Android 消息中心接入指南</h3>
               <p className="text-xs text-slate-400">
-                支持系统公告、启动强弹窗、版本升级引导与已读状态自动同步
+                支持系统公告、H5 富文本页面嵌入、启动强弹窗、版本升级引导与已读状态自动同步
               </p>
             </div>
           </div>
@@ -264,12 +367,112 @@ object MessageCenterManager {
 
         {/* Content */}
         <div className="p-6 space-y-6 max-h-[80vh] overflow-y-auto">
+          {/* Highlight Section: H5 WebView Embed */}
+          <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-5 space-y-4 shadow-lg">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <div className="rounded-lg bg-emerald-500/20 p-1.5 text-emerald-400">
+                  <Globe className="h-5 w-5" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-white flex items-center space-x-1.5">
+                    <span>🔥 官方推荐：Android WebView 嵌入 H5 富文本公告页面</span>
+                    <span className="rounded bg-emerald-500/20 text-emerald-300 text-[10px] px-1.5 py-0.5 border border-emerald-500/30">
+                      最新增加
+                    </span>
+                  </h4>
+                  <p className="text-xs text-slate-300 mt-0.5">
+                    零客户端渲染负担，完美呈现标题、列表、代码高亮、表格、点击大图灯箱预览，自适应深浅色模式与 JS 桥接交互
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* H5 URL Formats */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-xs font-semibold text-slate-200">
+                <span>H5 页面 URL 规范与参数说明：</span>
+                <button
+                  onClick={() => handleCopy(h5UrlExamples, 10)}
+                  className="flex items-center space-x-1 text-xs text-emerald-400 hover:text-emerald-300"
+                >
+                  {copiedIndex === 10 ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                  <span>复制 URL 示例</span>
+                </button>
+              </div>
+              <pre className="rounded-xl border border-slate-800 bg-slate-950 p-3 font-mono text-xs text-emerald-300 overflow-x-auto">
+                {h5UrlExamples}
+              </pre>
+
+              <div className="overflow-x-auto mt-2">
+                <table className="w-full text-left text-[11px] border border-slate-800 rounded-lg overflow-hidden">
+                  <thead className="bg-slate-950 text-slate-400 font-semibold border-b border-slate-800">
+                    <tr>
+                      <th className="p-2">参数</th>
+                      <th className="p-2">说明</th>
+                      <th className="p-2">示例</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 bg-slate-900/60 text-slate-300 font-mono">
+                    <tr>
+                      <td className="p-2 text-indigo-300">id</td>
+                      <td className="p-2 font-sans">公告文档唯一 ObjectId（可直接作为路径 /h5/messages/&#123;id&#125;）</td>
+                      <td className="p-2">65b0f123...</td>
+                    </tr>
+                    <tr>
+                      <td className="p-2 text-indigo-300">key</td>
+                      <td className="p-2 font-sans">公告自定义英文唯一标识（常用于开屏公告、协议、活动）</td>
+                      <td className="p-2">splash_notice</td>
+                    </tr>
+                    <tr>
+                      <td className="p-2 text-indigo-300">userId</td>
+                      <td className="p-2 font-sans">客户端当前登录用户 ID（传入后页面打开时自动调用已读上报）</td>
+                      <td className="p-2">user_1001</td>
+                    </tr>
+                    <tr>
+                      <td className="p-2 text-indigo-300">theme</td>
+                      <td className="p-2 font-sans">强制主题风格：dark (暗黑)、light (浅色)、auto (跟随系统)</td>
+                      <td className="p-2">dark</td>
+                    </tr>
+                    <tr>
+                      <td className="p-2 text-indigo-300">hideHeader</td>
+                      <td className="p-2 font-sans">是否隐藏 H5 自带的顶部导航条（适合由原生 Toolbar 控制的场景）</td>
+                      <td className="p-2">true</td>
+                    </tr>
+                    <tr>
+                      <td className="p-2 text-indigo-300">hideAction</td>
+                      <td className="p-2 font-sans">是否隐藏 H5 自带的底部吸底操作按钮</td>
+                      <td className="p-2">true</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Android Activity WebView Code */}
+            <div className="space-y-1.5 pt-2">
+              <div className="flex items-center justify-between text-xs font-semibold text-slate-200">
+                <span>Android WebView 容器集成源码 (AnnouncementActivity.kt)：</span>
+                <button
+                  onClick={() => handleCopy(webViewActivityCode, 11)}
+                  className="flex items-center space-x-1 text-xs text-emerald-400 hover:text-emerald-300"
+                >
+                  {copiedIndex === 11 ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                  <span>复制 Activity 源码</span>
+                </button>
+              </div>
+              <pre className="rounded-xl border border-slate-800 bg-slate-950 p-4 font-mono text-xs text-slate-300 overflow-x-auto max-h-96">
+                {webViewActivityCode}
+              </pre>
+            </div>
+          </div>
+
           {/* Step 1: Client Query */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <h4 className="flex items-center space-x-1.5 text-xs font-semibold text-white">
                 <Terminal className="h-4 w-4 text-indigo-400" />
-                <span>1. 客户端获取消息接口 (HTTP GET)</span>
+                <span>1. 客户端获取消息列表接口 (HTTP GET)</span>
               </h4>
               <button
                 onClick={() => handleCopy(curlExample, 1)}
@@ -296,7 +499,7 @@ object MessageCenterManager {
             <div className="flex items-center justify-between">
               <h4 className="flex items-center space-x-1.5 text-xs font-semibold text-white">
                 <Terminal className="h-4 w-4 text-cyan-400" />
-                <span>1.1 按 Key 精确拉取公告详情 (如 splash_notice, user_agreement)</span>
+                <span>1.1 按 Key 精确拉取单条公告详情 (HTTP GET)</span>
               </h4>
               <button
                 onClick={() => handleCopy(queryByKeyCurl, 4)}
@@ -313,9 +516,6 @@ object MessageCenterManager {
             <pre className="rounded-xl border border-slate-800 bg-slate-950 p-3 font-mono text-xs text-cyan-300 overflow-x-auto">
               {queryByKeyCurl}
             </pre>
-            <p className="text-[11px] text-slate-400">
-              适用于开屏弹窗、用户协议、隐私政策等需要通过固定 Key 精确获取单篇公告并渲染的业务场景。
-            </p>
           </div>
 
           {/* Step 2: Mark As Read */}
@@ -344,7 +544,7 @@ object MessageCenterManager {
 
           {/* Step 3: Response Example */}
           <div className="space-y-2">
-            <h4 className="text-xs font-semibold text-white">3. 返回数据结构示例</h4>
+            <h4 className="text-xs font-semibold text-white">3. 消息列表 JSON 返回数据结构示例</h4>
             <pre className="rounded-xl border border-slate-800 bg-slate-950 p-3 font-mono text-xs text-amber-300 overflow-x-auto max-h-48">
               {jsonResponseExample}
             </pre>
@@ -355,7 +555,7 @@ object MessageCenterManager {
             <div className="flex items-center justify-between">
               <h4 className="flex items-center space-x-1.5 text-xs font-semibold text-white">
                 <Code2 className="h-4 w-4 text-indigo-400" />
-                <span>4. Android Kotlin 完整集成代码 (MessageCenterManager.kt)</span>
+                <span>4. 原生网络请求管理器 (MessageCenterManager.kt)</span>
               </h4>
               <button
                 onClick={() => handleCopy(kotlinSdkCode, 3)}
@@ -372,32 +572,6 @@ object MessageCenterManager {
             <pre className="rounded-xl border border-slate-800 bg-slate-950 p-4 font-mono text-xs text-slate-300 overflow-x-auto max-h-96">
               {kotlinSdkCode}
             </pre>
-          </div>
-
-          {/* Step 5: Android Markdown Rich Text Rendering */}
-          <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 p-4 space-y-3">
-            <h4 className="flex items-center space-x-1.5 text-xs font-semibold text-indigo-300">
-              <Smartphone className="h-4 w-4 text-indigo-400" />
-              <span>5. Android 端渲染 Markdown 富文本公告指南</span>
-            </h4>
-            <p className="text-[11px] text-slate-300 leading-relaxed">
-              系统公告与消息正文已全面支持 Markdown 语法（标题、粗体、列表、引用、表格等）。Android 端推荐以下方案极简接入：
-            </p>
-            <div className="space-y-2 text-[11px] font-mono">
-              <div className="rounded-lg bg-slate-950 p-3 border border-slate-800">
-                <span className="text-slate-400 block mb-1">// 方案 A: 经典 View / Material Dialog (依赖 io.noties.markwon:core:4.6.2)</span>
-                <span className="text-indigo-300 block">val markwon = Markwon.create(context)</span>
-                <span className="text-indigo-300 block">val messageTextView = dialogView.findViewById&lt;TextView&gt;(R.id.tv_message)</span>
-                <span className="text-indigo-300 block">markwon.setMarkdown(messageTextView, message.content)</span>
-              </div>
-              <div className="rounded-lg bg-slate-950 p-3 border border-slate-800">
-                <span className="text-slate-400 block mb-1">// 方案 B: Jetpack Compose (依赖 dev.jeziellago:compose-markdown:0.5.6)</span>
-                <span className="text-indigo-300 block">MarkdownText(</span>
-                <span className="text-indigo-300 block">    markdown = message.content,</span>
-                <span className="text-indigo-300 block">    color = MaterialTheme.colorScheme.onSurface</span>
-                <span className="text-indigo-300 block">)</span>
-              </div>
-            </div>
           </div>
         </div>
 

@@ -32,6 +32,7 @@ export interface CreateDeviceInput {
 export interface UpdateDeviceInput {
   _id?: string;
   deviceId?: string;
+  newDeviceId?: string;
   deviceInfo?: string;
   brand?: string;
   model?: string;
@@ -41,6 +42,7 @@ export interface UpdateDeviceInput {
   pointsDelta?: number;      // 快捷积分增减（如 +10, -5）
   status?: DeviceStatus;
   remark?: string;
+  reason?: string;           // 积分调整事由
 }
 
 export interface DeviceQueryParams {

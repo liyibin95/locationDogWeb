@@ -362,22 +362,30 @@ export const DeviceTable: React.FC<DeviceTableProps> = ({
 
       {/* Detail Modal */}
       {detailDevice && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="w-full max-w-lg rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl space-y-4">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto"
+          onClick={() => setDetailDevice(null)}
+        >
+          <div
+            className="w-full max-w-lg rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl space-y-4 my-8"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center space-x-2">
                 <Smartphone className="h-5 w-5 text-indigo-400" />
                 <h3 className="text-sm font-bold text-white">Android 设备详情</h3>
               </div>
               <button
+                type="button"
                 onClick={() => setDetailDevice(null)}
                 className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white transition"
+                title="关闭"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
-            <div className="space-y-3 text-xs">
+            <div className="space-y-3 text-xs max-h-[70vh] overflow-y-auto pr-1">
               <div className="grid grid-cols-3 gap-2 py-1 border-b border-slate-800/60">
                 <span className="text-slate-400">数据库 ID:</span>
                 <span className="col-span-2 font-mono text-slate-200">{detailDevice._id}</span>
@@ -448,6 +456,7 @@ export const DeviceTable: React.FC<DeviceTableProps> = ({
 
             <div className="flex justify-end space-x-2 pt-2 border-t border-slate-800">
               <button
+                type="button"
                 onClick={() => {
                   const target = detailDevice;
                   setDetailDevice(null);
@@ -458,6 +467,7 @@ export const DeviceTable: React.FC<DeviceTableProps> = ({
                 编辑此设备
               </button>
               <button
+                type="button"
                 onClick={() => setDetailDevice(null)}
                 className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-700 transition"
               >

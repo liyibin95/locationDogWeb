@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getMessagesCollection, getMessageReadsCollection } from '@/lib/mongodb';
 import { getOrSetCache } from '@/lib/redis';
 import { MessageDocument } from '@/types/message';
-import { Filter } from 'mongodb';
+import { Filter, ObjectId } from 'mongodb';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,7 +52,9 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
 
+    const id = searchParams.get('id')?.trim();
     const key = searchParams.get('key')?.trim();
+    const preview = searchParams.get('preview') === 'true';
     const appId = searchParams.get('appId')?.trim() || '';
     const userId = searchParams.get('userId')?.trim() || '';
     const channel = searchParams.get('channel')?.trim() || '';
@@ -64,53 +66,75 @@ export async function GET(request: NextRequest) {
 
     const now = new Date();
 
-    // 如果指定了 key，则按 key 查询单条公告详情（结合 Redis 缓存）
-    if (key) {
-      const keyCacheKey = `cache:messages:doc:${key}:${appId || 'all'}`;
+    // 如果指定了 id 或 key，则查询单条公告详情（结合 Redis 缓存）
+    if (id || key) {
+      const cacheKey = id
+        ? `cache:messages:doc:id:${id}:${preview}`
+        : `cache:messages:doc:key:${key}:${appId || 'all'}:${preview}`;
+
       const doc = await getOrSetCache(
-        keyCacheKey,
+        cacheKey,
         async () => {
           const collection = await getMessagesCollection();
-          const keyFilter: Filter<MessageDocument> = {
-            key,
-            status: 'published',
-            publishAt: { $lte: new Date() },
-            $or: [{ expireAt: { $exists: false } }, { expireAt: null }, { expireAt: { $gt: new Date() } }],
-          };
+          if (id) {
+            try {
+              const filter: Filter<MessageDocument> = {
+                _id: new ObjectId(id) as any,
+                ...(preview ? {} : { status: 'published' }),
+              };
+              return await collection.findOne(filter);
+            } catch {
+              return null;
+            }
+          } else {
+            const keyFilter: Filter<MessageDocument> = {
+              key,
+              ...(preview
+                ? {}
+                : {
+                    status: 'published',
+                    publishAt: { $lte: new Date() },
+                    $or: [
+                      { expireAt: { $exists: false } },
+                      { expireAt: null },
+                      { expireAt: { $gt: new Date() } },
+                    ],
+                  }),
+            };
 
-          if (appId) {
-            keyFilter.appId = { $in: [appId, 'all'] };
+            if (appId && appId !== 'all') {
+              keyFilter.appId = { $in: [appId, 'all'] };
+            }
+
+            return await collection.findOne(keyFilter, {
+              sort: { priority: -1, publishAt: -1, createdAt: -1 },
+            });
           }
-
-          return await collection.findOne(keyFilter, {
-            sort: { priority: -1, publishAt: -1, createdAt: -1 },
-          });
         },
-        120
+        60
       );
 
       if (!doc) {
         return NextResponse.json(
-          { success: false, error: `未找到 key 为 "${key}" 的有效公告或已下线` },
+          {
+            success: false,
+            error: id
+              ? `未找到指定公告或尚未发布`
+              : `未找到 key 为 "${key}" 的有效公告或已下线`,
+          },
           { status: 404 }
         );
       }
 
-      // 验证受众定向
+      // 验证受众定向（如果提供了定向参数才做强拦截，方便灵活访问）
       let isTargetMatched = true;
-      if (doc.targetType === 'user') {
-        if (!userId) isTargetMatched = false;
-        else {
-          const targets = (doc.targetValue || '').split(',').map((s) => s.trim());
-          isTargetMatched = targets.includes(userId);
-        }
-      } else if (doc.targetType === 'channel') {
-        if (!channel) isTargetMatched = false;
-        else {
-          const targets = (doc.targetValue || '').split(',').map((s) => s.trim().toLowerCase());
-          isTargetMatched = targets.includes(channel.toLowerCase()) || targets.includes('all');
-        }
-      } else if (doc.targetType === 'version') {
+      if (doc.targetType === 'user' && userId) {
+        const targets = (doc.targetValue || '').split(',').map((s) => s.trim());
+        isTargetMatched = targets.includes(userId);
+      } else if (doc.targetType === 'channel' && channel) {
+        const targets = (doc.targetValue || '').split(',').map((s) => s.trim().toLowerCase());
+        isTargetMatched = targets.includes(channel.toLowerCase()) || targets.includes('all');
+      } else if (doc.targetType === 'version' && versionCode !== undefined) {
         isTargetMatched = matchVersionRule(doc.targetValue || '', versionCode);
       }
 
@@ -133,6 +157,8 @@ export async function GET(request: NextRequest) {
         isRead = Boolean(readRecord);
       }
 
+      const isExpired = Boolean(doc.expireAt && new Date(doc.expireAt) < now);
+
       const item = {
         _id: docIdStr,
         key: doc.key || '',
@@ -141,12 +167,19 @@ export async function GET(request: NextRequest) {
         type: doc.type,
         priority: doc.priority,
         appId: doc.appId,
+        targetType: doc.targetType,
+        targetValue: doc.targetValue,
         actionUrl: doc.actionUrl || '',
         actionText: doc.actionText || '',
         isPopup: doc.isPopup,
         extra: doc.extra || {},
+        status: doc.status,
         publishAt: doc.publishAt,
         expireAt: doc.expireAt,
+        isExpired,
+        readCount: doc.readCount || 0,
+        createdAt: doc.createdAt,
+        updatedAt: doc.updatedAt,
         isRead,
       };
 

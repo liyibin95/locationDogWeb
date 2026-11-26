@@ -290,6 +290,18 @@ export const MessageTable: React.FC<MessageTableProps> = ({
                     {/* Actions */}
                     <td className="px-4 py-3.5 text-right whitespace-nowrap">
                       <div className="flex items-center justify-end space-x-1">
+                        {/* Open H5 page in new tab */}
+                        <a
+                          href={`/h5/messages/${id}${message.status !== 'published' ? '?preview=true' : ''}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center space-x-1 rounded px-2 py-1 text-[11px] text-emerald-400 hover:bg-emerald-500/10 transition"
+                          title="在浏览器中直接打开 H5 公告页面 (嵌入 Android App 链接)"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" />
+                          <span className="hidden sm:inline">H5 公告</span>
+                        </a>
+
                         {/* Preview on device button */}
                         <button
                           onClick={() => onPreviewMessage(message)}

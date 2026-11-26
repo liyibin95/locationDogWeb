@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDevicesCollection } from '@/lib/mongodb';
 import { deleteCachePattern } from '@/lib/redis';
 import { DeviceDocument } from '@/types/device';
+import { recordDevicePointsLog } from '@/lib/device-log';
 
 export const dynamic = 'force-dynamic';
 
@@ -167,6 +168,120 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     return NextResponse.json(
       { success: false, error: error.message || '客户端上报失败' },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * PUT /api/devices/client
+ * Android 客户端或终端服务按 deviceId 调整/变更积分，并在日志中记录变动值、修改前值、修改后值
+ */
+export async function PUT(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { deviceId, points, pointsDelta, reason, remark } = body;
+
+    if (!deviceId || typeof deviceId !== 'string' || !deviceId.trim()) {
+      return NextResponse.json(
+        { success: false, error: '缺少必需参数 deviceId' },
+        { status: 400 }
+      );
+    }
+
+    if (points === undefined && pointsDelta === undefined) {
+      return NextResponse.json(
+        { success: false, error: '必须提供 points (目标积分) 或 pointsDelta (积分变动值)' },
+        { status: 400 }
+      );
+    }
+
+    const cleanDeviceId = deviceId.trim();
+    const collection = await getDevicesCollection();
+    const current = await collection.findOne({ deviceId: cleanDeviceId });
+
+    if (!current) {
+      return NextResponse.json(
+        { success: false, error: `未找到设备ID为 "${cleanDeviceId}" 的设备` },
+        { status: 404 }
+      );
+    }
+
+    if (current.status === 'disabled') {
+      return NextResponse.json(
+        { success: false, error: '设备已被禁用，无法变更积分' },
+        { status: 403 }
+      );
+    }
+
+    const beforePoints =
+      typeof current.points === 'number' && !isNaN(current.points) ? current.points : 0;
+    let afterPoints = beforePoints;
+
+    if (typeof pointsDelta === 'number' && !isNaN(pointsDelta)) {
+      afterPoints = Math.max(0, beforePoints + Math.floor(pointsDelta));
+    } else if (points !== undefined) {
+      const numPoints = Number(points);
+      if (isNaN(numPoints)) {
+        return NextResponse.json(
+          { success: false, error: 'points 必须为有效数字' },
+          { status: 400 }
+        );
+      }
+      afterPoints = Math.max(0, Math.floor(numPoints));
+    }
+
+    const changeValue = afterPoints - beforePoints;
+    const now = new Date();
+    const updateData: any = {
+      points: afterPoints,
+      updatedAt: now,
+    };
+
+    if (remark) {
+      updateData.remark = remark;
+    }
+
+    await collection.updateOne({ deviceId: cleanDeviceId }, { $set: updateData });
+    deleteCachePattern('cache:devices:*').catch(() => {});
+
+    // 记录日志：包含修改值、修改前值、修改后值
+    const clientIp =
+      request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+      request.headers.get('x-real-ip') ||
+      '';
+    const userAgent = request.headers.get('user-agent') || '';
+
+    await recordDevicePointsLog({
+      deviceId: cleanDeviceId,
+      deviceDbId: current._id?.toString(),
+      deviceInfo: current.deviceInfo,
+      beforePoints,
+      afterPoints,
+      changeValue,
+      pointsDelta: typeof pointsDelta === 'number' ? pointsDelta : undefined,
+      targetPoints: points !== undefined ? Number(points) : undefined,
+      reason: reason || remark || '客户端积分调整',
+      operator: 'client',
+      ip: clientIp,
+      userAgent,
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: '积分修改成功',
+      data: {
+        _id: current._id?.toString(),
+        deviceId: cleanDeviceId,
+        beforePoints,
+        afterPoints,
+        changeValue,
+        points: afterPoints,
+      },
+    });
+  } catch (error: any) {
+    return NextResponse.json(
+      { success: false, error: error.message || '更新设备积分失败' },
       { status: 500 }
     );
   }

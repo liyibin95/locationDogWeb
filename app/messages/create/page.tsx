@@ -31,6 +31,7 @@ import {
   Loader2,
   CheckCircle2,
   KeyRound,
+  ExternalLink,
 } from 'lucide-react';
 
 function MessageCreateForm() {
@@ -380,6 +381,18 @@ function MessageCreateForm() {
 
         {/* Top buttons */}
         <div className="flex items-center space-x-2">
+          {isEdit && editId && (
+            <a
+              href={`/h5/messages/${editId}?preview=true`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center space-x-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-400 hover:bg-emerald-500/20 transition"
+              title="在独立窗口中预览 H5 公告效果"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              <span>预览 H5</span>
+            </a>
+          )}
           <Link
             href="/messages"
             className="rounded-lg border border-slate-700 bg-slate-800 px-3.5 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-700 transition"

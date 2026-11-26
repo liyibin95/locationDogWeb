@@ -14,7 +14,7 @@ export const ApiDocModal: React.FC<ApiDocModalProps> = ({
   onClose,
   apiKey,
 }) => {
-  const [activeTab, setActiveTab] = useState<'android' | 'curl' | 'configs' | 'messages' | 'js' | 'python' | 'vercel'>('android');
+  const [activeTab, setActiveTab] = useState<'android' | 'apps' | 'configs' | 'messages' | 'curl' | 'js' | 'python' | 'vercel'>('android');
   const [copied, setCopied] = useState(false);
 
   if (!isOpen) return null;
@@ -40,10 +40,49 @@ val messageUrl = "http://localhost:3000/api/messages/client?appId=com.example.ap
 // URL: http://localhost:3000/api/messages/read
 // Body: { "userId": "user_1001", "messageId": "65b0f..." }
 
-// 4. 日志中心上报 (Log Center HTTP POST):
+// 4. 版本更新检测 (App Update Check):
+// URL: http://localhost:3000/api/apps/check-update?appId=default&versionCode=100
+// 返回: { "success": true, "hasUpdate": true, "forceUpdate": false, "latestVersion": { "downloadUrl": "...", ... } }
+
+// 5. 日志中心上报 (Log Center HTTP POST):
 // URL: http://localhost:3000/api/logs
 // Header: x-api-key: ${currentKey}
 // Body: { "level": "info", "service": "android-app", "message": "应用冷启动完成", "details": { "device": "Pixel 7" } }`,
+
+    apps: `# ==========================================
+# App 版本管理与更新检测 API
+# ==========================================
+
+# 1. Android 客户端查询版本更新 (GET)
+curl "http://localhost:3000/api/apps/check-update?appId=default&versionCode=100&versionName=1.0.0"
+
+# 2. Android 客户端查询版本更新 (POST)
+curl -X POST "http://localhost:3000/api/apps/check-update" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "appId": "default",
+    "versionCode": 100,
+    "versionName": "1.0.0",
+    "channel": "official"
+  }'
+
+# 3. 安装包下载与累计计数
+curl -L "http://localhost:3000/api/apps/download/<VERSION_ID>"
+
+# 4. 发布新版本 (需携带管理凭证)
+curl -X POST "http://localhost:3000/api/apps/versions" \\
+  -H "Content-Type: application/json" \\
+  -H "x-api-key: ${currentKey}" \\
+  -d '{
+    "appId": "default",
+    "appName": "NextLog Android",
+    "versionName": "1.2.0",
+    "versionCode": 10200,
+    "downloadUrl": "https://example.com/app-v1.2.0.apk",
+    "changelog": "1. 优化体验\\n2. 修复闪退",
+    "forceUpdate": false,
+    "status": "published"
+  }'`,
 
     configs: `# ==========================================
 # 配置中心 (Remote Config) API 接口
@@ -244,6 +283,7 @@ print("Response:", response.json())`,
           <div className="flex space-x-1">
             {[
               { id: 'android', label: 'Android 对接' },
+              { id: 'apps', label: '版本管理 API' },
               { id: 'configs', label: '配置中心 API' },
               { id: 'messages', label: '消息中心 API' },
               { id: 'curl', label: '日志 cURL' },

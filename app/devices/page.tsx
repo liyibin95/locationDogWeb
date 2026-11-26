@@ -9,7 +9,7 @@ import { DeviceModal } from '@/components/devices/DeviceModal';
 import { DevicePointsModal } from '@/components/devices/DevicePointsModal';
 import { AndroidDeviceModal } from '@/components/devices/AndroidDeviceModal';
 import { DeviceDocument, DeviceStats } from '@/types/device';
-import { CheckCircle2, AlertCircle, Smartphone, Plus } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Smartphone, Plus, Coins } from 'lucide-react';
 
 export default function DevicesPage() {
   const [devices, setDevices] = useState<DeviceDocument[]>([]);
@@ -219,6 +219,16 @@ export default function DevicesPage() {
 
         <div className="flex items-center space-x-2">
           <button
+            onClick={() => {
+              setPointsTargetDevice(null);
+              setIsPointsModalOpen(true);
+            }}
+            className="flex items-center space-x-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-300 hover:bg-amber-500/20 hover:border-amber-500/50 transition"
+          >
+            <Coins className="h-3.5 w-3.5 text-amber-400" />
+            <span>按设备ID调整积分</span>
+          </button>
+          <button
             onClick={() => setIsAndroidDocOpen(true)}
             className="flex items-center space-x-1.5 rounded-lg border border-slate-700 bg-slate-800/80 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700 hover:text-white transition"
           >
@@ -323,8 +333,8 @@ export default function DevicesPage() {
           setIsPointsModalOpen(false);
           setPointsTargetDevice(null);
         }}
-        onSuccess={() => {
-          showSuccess('设备积分已成功更新');
+        onSuccess={(msg) => {
+          showSuccess(msg || '设备积分已成功更新');
           fetchDevices(pagination.page);
           fetchStats();
         }}

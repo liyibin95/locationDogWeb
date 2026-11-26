@@ -334,6 +334,30 @@ curl -X POST "https://your-domain.vercel.app/api/messages/read" \
 
 ---
 
+### 4. App 版本管理与客户端更新检测
+
+#### ① Android 客户端检查更新 (`GET /api/apps/check-update`)
+- **请求参数**：
+  - `appId`: 应用包名或标识（默认 `default`，例如 `com.example.app`）
+  - `versionCode`: 客户端当前安装的版本号（整数，例如 `100`）
+  - `versionName`: 客户端当前版本名（例如 `1.0.0`，可选）
+  - `channel`: 发布渠道（例如 `official`、`googleplay`，可选）
+- **返回响应**：
+  - `hasUpdate`: 是否存在新版本（当 `最新 versionCode > 当前 versionCode` 时为 `true`）
+  - `forceUpdate`: 是否需要强制更新（最新版本标记为强制更新，或当前客户端版本低于 `minVersionCode` 时自动触发强更）
+  - `latestVersion`: 包含最新版本的版本名、版本号、APK 下载链接 (`downloadUrl`)、自动累计计数的下载链接 (`trackDownloadUrl`)、文件大小、MD5 完整性哈希与更新日志 (`changelog`)。
+
+#### ② Android 安装包上传 (`POST /api/apps/upload`)
+- 支持直接上传打包好的 `.apk` 安装包文件，服务端自动提取文件名、计算文件大小及 MD5 / SHA-256 哈希值，优先分发至 Vercel Blob 云存储或本地静态服务目录。
+
+#### ③ 安装包下载并统计 (`GET /api/apps/download/[id]`)
+- 自动递增该版本的 `downloadCount` 下载量计数器，并安全 302 重定向至实际安装包地址。
+
+#### ④ 管理后台版本 CRUD (`/api/apps/versions`)
+- 支持全生命周期版本发布、草稿、下线归档，强制升级策略配置，渠道灰度控制及历史下载报表。
+
+---
+
 ## 🛠️ 项目目录结构
 
 ```
@@ -345,12 +369,19 @@ next-log/
 │   │   ├── configs/          # 配置中心接口 (管理 CRUD、统计)
 │   │   │   └── client/       # Android 客户端专用配置同步接口
 │   │   ├── upload/           # 图片上传接口 (Vercel Blob 集成)
+│   │   ├── apps/             # App 版本管理接口 (发布、统计)
+│   │   │   ├── check-update/ # Android 客户端版本检测与更新接口
+│   │   │   ├── download/     # 安装包下载与累加计数接口
+│   │   │   └── upload/       # APK 安装包上传接口
 │   │   └── messages/         # 消息中心接口 (管理 CRUD、统计)
 │   │       ├── client/       # Android 客户端专用拉取消息与弹窗接口
 │   │       └── read/         # 客户端标记消息已读接口
 │   ├── configs/              # 配置中心前端管理看板
 │   ├── messages/             # 消息中心前端管理看板
 │   │   └── create/           # 消息公告沉浸式 Markdown 编辑与实时双栏预览独立路由
+│   ├── apps/                 # App 版本管理前端看板 (APK 上传、版本号与强更控制)
+│   ├── devices/              # Android 设备管理看板
+│   ├── feedbacks/            # 意见反馈管理看板
 │   ├── login/                # 页面登录界面
 │   ├── globals.css           # 全局样式与暗黑主题
 │   ├── layout.tsx            # 根布局
@@ -358,8 +389,11 @@ next-log/
 ├── components/
 │   ├── AdminLayout.tsx       # 后台管理系统主布局 (左侧可收缩菜单 + 顶部快捷栏)
 │   ├── MarkdownRenderer.tsx  # 轻量级 Markdown 富文本与图片渲染组件
+│   ├── apps/                 # App 版本管理组件 (概览卡片、表格、发布弹窗、Android指南)
 │   ├── configs/              # 配置中心组件 (卡片、表格、编辑弹窗、Android指南)
 │   ├── messages/             # 消息中心组件 (卡片、表格、真机预览、Android指南)
+│   ├── devices/              # 设备管理组件
+│   ├── feedbacks/            # 意见反馈组件
 │   ├── LogTable.tsx          # 日志表格及详情展示
 │   ├── LogFilterBar.tsx      # 日志多维筛选
 │   ├── StatsOverview.tsx     # 日志统计看板
@@ -367,9 +401,10 @@ next-log/
 ├── lib/
 │   ├── auth.ts               # 接口鉴权中间件 (API Key 校验)
 │   ├── image-uploader.ts     # 图片尺寸判断与 Base64 / Vercel Blob 智能存储策略
-│   ├── mongodb.ts            # MongoDB 连接池及日志/配置/消息索引管理
+│   ├── mongodb.ts            # MongoDB 连接池及日志/配置/消息/设备/版本索引管理
 │   └── page-auth.ts          # 页面密码 Cookie 会话保护
 ├── types/
+│   ├── app-version.ts        # App 版本管理 TypeScript 定义
 │   ├── log.ts                # 日志相关 TypeScript 定义
 │   ├── config.ts             # 配置中心 TypeScript 定义
 │   └── message.ts            # 消息中心 TypeScript 定义

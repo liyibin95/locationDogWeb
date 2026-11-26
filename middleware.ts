@@ -12,7 +12,11 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/api/configs') || // 配置中心 API 具备鉴权机制与客户端接口
     pathname.startsWith('/api/messages') || // 消息中心 API 具备鉴权机制与客户端接口
     pathname.startsWith('/api/devices') || // 设备管理 API 具备鉴权机制与客户端接口
+    pathname.startsWith('/api/feedbacks') || // 意见反馈 API
+    pathname.startsWith('/api/apps') || // App 版本管理与更新检测 API
     pathname.startsWith('/api/upload') || // 上传接口具备独立鉴权机制
+    pathname.startsWith('/uploads') || // 本地上传资源静态直链访问
+    pathname.startsWith('/h5') || // H5 移动端公告与富文本页面（嵌入 Android App）
     pathname.startsWith('/_next') ||
     pathname.startsWith('/favicon.ico')
   ) {

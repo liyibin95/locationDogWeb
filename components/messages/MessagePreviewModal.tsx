@@ -1,9 +1,20 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { MessageDocument } from '@/types/message';
 import { MarkdownRenderer } from '@/components/MarkdownRenderer';
-import { X, Wifi, Battery, Signal, Bell, ArrowRight, ExternalLink } from 'lucide-react';
+import {
+  X,
+  Wifi,
+  Battery,
+  Signal,
+  Bell,
+  ArrowRight,
+  ExternalLink,
+  Copy,
+  Check,
+  Globe,
+} from 'lucide-react';
 
 interface MessagePreviewModalProps {
   message: MessageDocument | null;
@@ -11,7 +22,22 @@ interface MessagePreviewModalProps {
 }
 
 export const MessagePreviewModal: React.FC<MessagePreviewModalProps> = ({ message, onClose }) => {
+  const [copied, setCopied] = useState(false);
+
   if (!message) return null;
+
+  const h5Path = `/h5/messages/${message._id}${message.status !== 'published' ? '?preview=true' : ''}`;
+  const fullH5Url =
+    typeof window !== 'undefined'
+      ? `${window.location.origin}${h5Path}`
+      : h5Path;
+
+  const handleCopyUrl = () => {
+    navigator.clipboard.writeText(fullH5Url).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm overflow-y-auto">
@@ -36,8 +62,8 @@ export const MessagePreviewModal: React.FC<MessagePreviewModalProps> = ({ messag
         </button>
 
         {/* Simulated Screen Content */}
-        <div className="rounded-2xl border border-slate-800/80 bg-slate-900/90 p-4 min-h-[480px] flex flex-col justify-between">
-          <div className="overflow-y-auto max-h-[460px] pr-1">
+        <div className="rounded-2xl border border-slate-800/80 bg-slate-900/90 p-4 min-h-[460px] flex flex-col justify-between">
+          <div className="overflow-y-auto max-h-[420px] pr-1">
             {/* App Bar Preview */}
             <div className="flex items-center space-x-2 border-b border-slate-800 pb-3">
               <div className="h-6 w-6 rounded-lg bg-indigo-600 flex items-center justify-center text-white text-[10px] font-bold">
@@ -125,6 +151,47 @@ export const MessagePreviewModal: React.FC<MessagePreviewModalProps> = ({ messag
 
           {/* Android Home Navigation Bar Pill */}
           <div className="mx-auto mt-4 h-1 w-24 rounded-full bg-slate-600"></div>
+        </div>
+
+        {/* Android App H5 Embed Link Info */}
+        <div className="mt-4 pt-3 border-t border-slate-800 space-y-2">
+          <div className="flex items-center justify-between text-[11px] text-slate-400">
+            <span className="flex items-center space-x-1 text-emerald-400 font-medium">
+              <Globe className="h-3.5 w-3.5" />
+              <span>Android App H5 嵌入链接</span>
+            </span>
+            <a
+              href={h5Path}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center space-x-1 text-indigo-400 hover:text-indigo-300 transition"
+            >
+              <span>新标签打开</span>
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          </div>
+
+          <div className="flex items-center space-x-1.5 bg-slate-900 border border-slate-800 rounded-lg p-1.5">
+            <span className="flex-1 font-mono text-[10px] text-slate-300 truncate select-all px-1">
+              {fullH5Url}
+            </span>
+            <button
+              onClick={handleCopyUrl}
+              className="flex items-center space-x-1 rounded bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 px-2 py-1 text-[10px] font-medium transition"
+            >
+              {copied ? (
+                <>
+                  <Check className="h-3 w-3 text-emerald-400" />
+                  <span className="text-emerald-400">已复制</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="h-3 w-3" />
+                  <span>复制</span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </div>
     </div>

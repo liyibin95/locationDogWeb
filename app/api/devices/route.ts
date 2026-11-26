@@ -3,6 +3,7 @@ import { getDevicesCollection } from '@/lib/mongodb';
 import { validateAdminOrApiKey } from '@/lib/auth';
 import { getOrSetCache, deleteCachePattern } from '@/lib/redis';
 import { DeviceDocument, DeviceStatus } from '@/types/device';
+import { recordDevicePointsLog } from '@/lib/device-log';
 import { Filter, ObjectId, Sort } from 'mongodb';
 
 export const dynamic = 'force-dynamic';
@@ -233,6 +234,7 @@ export async function PUT(request: NextRequest) {
     const {
       _id,
       deviceId,
+      newDeviceId,
       deviceInfo,
       brand,
       model,
@@ -242,46 +244,74 @@ export async function PUT(request: NextRequest) {
       pointsDelta,
       status,
       remark,
+      reason,
       createdAt,
     } = body;
 
-    if (!_id) {
-      return NextResponse.json({ success: false, error: '必须提供设备 _id 参数' }, { status: 400 });
-    }
-
-    let objectId: ObjectId;
-    try {
-      objectId = new ObjectId(_id);
-    } catch {
-      return NextResponse.json({ success: false, error: '无效的 _id 格式' }, { status: 400 });
+    if (!_id && (!deviceId || typeof deviceId !== 'string' || !deviceId.trim())) {
+      return NextResponse.json(
+        { success: false, error: '必须提供设备 _id 或 deviceId 参数' },
+        { status: 400 }
+      );
     }
 
     const collection = await getDevicesCollection();
-    const current = await collection.findOne({ _id: objectId as any });
-    if (!current) {
-      return NextResponse.json({ success: false, error: '未找到指定设备' }, { status: 404 });
+    let current: DeviceDocument | null = null;
+    let queryFilter: Filter<DeviceDocument> | null = null;
+
+    if (_id) {
+      try {
+        const objectId = new ObjectId(_id);
+        queryFilter = { _id: objectId as any };
+        current = await collection.findOne(queryFilter);
+      } catch {
+        // 若 _id 格式不合法但传入了 deviceId，尝试按 deviceId 兜底匹配
+        if (deviceId && typeof deviceId === 'string' && deviceId.trim()) {
+          queryFilter = { deviceId: deviceId.trim() };
+          current = await collection.findOne(queryFilter);
+        } else {
+          return NextResponse.json({ success: false, error: '无效的 _id 格式' }, { status: 400 });
+        }
+      }
+    } else if (deviceId && typeof deviceId === 'string' && deviceId.trim()) {
+      queryFilter = { deviceId: deviceId.trim() };
+      current = await collection.findOne(queryFilter);
     }
 
-    // 若修改了 deviceId，需检查唯一性冲突
-    if (deviceId && deviceId.trim() !== current.deviceId) {
-      const cleanDeviceId = deviceId.trim();
-      const conflict = await collection.findOne({
-        deviceId: cleanDeviceId,
-        _id: { $ne: objectId as any },
-      });
-      if (conflict) {
-        return NextResponse.json(
-          { success: false, error: `设备ID "${cleanDeviceId}" 已被其他设备占用` },
-          { status: 409 }
-        );
-      }
+    if (!current || !queryFilter) {
+      const identifier = _id || deviceId;
+      return NextResponse.json(
+        { success: false, error: `未找到指定设备 (${identifier})` },
+        { status: 404 }
+      );
     }
+
+    // 若同时提供了 _id 与新的 deviceId，或提供了 newDeviceId，需检查唯一性冲突
+    const targetNewDeviceId =
+      newDeviceId && typeof newDeviceId === 'string' && newDeviceId.trim()
+        ? newDeviceId.trim()
+        : _id && deviceId && deviceId.trim() !== current.deviceId
+        ? deviceId.trim()
+        : null;
 
     const updateFields: any = {
       updatedAt: new Date(),
     };
 
-    if (deviceId !== undefined) updateFields.deviceId = deviceId.trim();
+    if (targetNewDeviceId && targetNewDeviceId !== current.deviceId) {
+      const conflict = await collection.findOne({
+        deviceId: targetNewDeviceId,
+        _id: { $ne: current._id },
+      });
+      if (conflict) {
+        return NextResponse.json(
+          { success: false, error: `设备ID "${targetNewDeviceId}" 已被其他设备占用` },
+          { status: 409 }
+        );
+      }
+      updateFields.deviceId = targetNewDeviceId;
+    }
+
     if (deviceInfo !== undefined) updateFields.deviceInfo = deviceInfo.trim();
     if (brand !== undefined) updateFields.brand = brand.trim();
     if (model !== undefined) updateFields.model = model.trim();
@@ -297,30 +327,68 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    // 积分修改逻辑：支持直接设定绝对积分值，或者通过 pointsDelta 快捷增减
+    // 积分修改逻辑：支持直接设定绝对积分值 (points)，或者通过 pointsDelta 快捷增减
+    const beforePoints =
+      typeof current.points === 'number' && !isNaN(current.points) ? current.points : 0;
+    let afterPoints = beforePoints;
+    let pointsChanged = false;
+
     if (typeof pointsDelta === 'number' && !isNaN(pointsDelta)) {
-      const newPoints = Math.max(0, (current.points || 0) + Math.floor(pointsDelta));
-      updateFields.points = newPoints;
+      afterPoints = Math.max(0, beforePoints + Math.floor(pointsDelta));
+      updateFields.points = afterPoints;
+      pointsChanged = true;
     } else if (points !== undefined) {
       const numPoints = Number(points);
       if (!isNaN(numPoints)) {
-        updateFields.points = Math.max(0, Math.floor(numPoints));
+        afterPoints = Math.max(0, Math.floor(numPoints));
+        updateFields.points = afterPoints;
+        pointsChanged = true;
       }
     }
 
-    await collection.updateOne({ _id: objectId as any }, { $set: updateFields });
+    await collection.updateOne(queryFilter, { $set: updateFields });
 
     deleteCachePattern('cache:devices:*').catch(() => {});
 
-    const updated = await collection.findOne({ _id: objectId as any });
+    // 如果修改了积分，记录每次修改值、修改前值、修改后值到日志集合 (logs)
+    if (pointsChanged) {
+      const changeValue = afterPoints - beforePoints;
+      const clientIp =
+        request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+        request.headers.get('x-real-ip') ||
+        '';
+      const userAgent = request.headers.get('user-agent') || '';
+
+      await recordDevicePointsLog({
+        deviceId: current.deviceId,
+        deviceDbId: current._id?.toString(),
+        deviceInfo: current.deviceInfo,
+        beforePoints,
+        afterPoints,
+        changeValue,
+        pointsDelta: typeof pointsDelta === 'number' ? pointsDelta : undefined,
+        targetPoints: points !== undefined ? Number(points) : undefined,
+        reason: reason || remark,
+        operator: 'admin',
+        ip: clientIp,
+        userAgent,
+      });
+    }
+
+    const updated = await collection.findOne(queryFilter);
 
     return NextResponse.json({
       success: true,
       data: {
         ...updated,
         _id: updated?._id?.toString(),
+        beforePoints: pointsChanged ? beforePoints : undefined,
+        afterPoints: pointsChanged ? afterPoints : undefined,
+        changeValue: pointsChanged ? afterPoints - beforePoints : undefined,
       },
-      message: '设备信息更新成功',
+      message: pointsChanged
+        ? `设备积分调整成功 (变动: ${afterPoints - beforePoints >= 0 ? '+' : ''}${afterPoints - beforePoints}，原积分: ${beforePoints}，现积分: ${afterPoints})`
+        : '设备信息更新成功',
     });
   } catch (error: any) {
     return NextResponse.json(
