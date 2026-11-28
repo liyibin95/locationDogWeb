@@ -163,8 +163,20 @@ export async function getDevicesCollection(): Promise<Collection<DeviceDocument>
 
   if (!deviceIndexesCreated) {
     try {
+      const existingIndexes = await collection.indexes().catch(() => []);
+      const oldDeviceIdIdx = existingIndexes.find(
+        (idx) => (idx.name === 'deviceId_1' || (idx.key && (idx.key as any).deviceId)) && !idx.sparse
+      );
+      if (oldDeviceIdIdx?.name) {
+        try {
+          await collection.dropIndex(oldDeviceIdIdx.name);
+        } catch {
+          // ignore drop error
+        }
+      }
+
       await Promise.all([
-        collection.createIndex({ deviceId: 1 }, { unique: true }),
+        collection.createIndex({ deviceId: 1 }, { unique: true, sparse: true }),
         collection.createIndex({ wechatId: 1 }),
         collection.createIndex({ createdAt: -1 }),
         collection.createIndex({ points: -1 }),

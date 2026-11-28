@@ -33,7 +33,7 @@ export const DevicePointsModal: React.FC<DevicePointsModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       if (device) {
-        setTargetDeviceId(device.deviceId);
+        setTargetDeviceId(device.deviceId || device.wechatId || '');
         setActiveDevice(device);
       } else {
         setTargetDeviceId('');

@@ -7,9 +7,10 @@ import { DeviceFilterBar } from '@/components/devices/DeviceFilterBar';
 import { DeviceTable } from '@/components/devices/DeviceTable';
 import { DeviceModal } from '@/components/devices/DeviceModal';
 import { DevicePointsModal } from '@/components/devices/DevicePointsModal';
+import { DeviceBindModal } from '@/components/devices/DeviceBindModal';
 import { AndroidDeviceModal } from '@/components/devices/AndroidDeviceModal';
 import { DeviceDocument, DeviceStats } from '@/types/device';
-import { CheckCircle2, AlertCircle, Smartphone, Plus, Coins } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Smartphone, Plus, Coins, Link2 } from 'lucide-react';
 
 export default function DevicesPage() {
   const [devices, setDevices] = useState<DeviceDocument[]>([]);
@@ -38,6 +39,8 @@ export default function DevicesPage() {
   const [editingDevice, setEditingDevice] = useState<DeviceDocument | null>(null);
   const [isPointsModalOpen, setIsPointsModalOpen] = useState(false);
   const [pointsTargetDevice, setPointsTargetDevice] = useState<DeviceDocument | null>(null);
+  const [isBindModalOpen, setIsBindModalOpen] = useState(false);
+  const [bindTargetDevice, setBindTargetDevice] = useState<DeviceDocument | null>(null);
   const [isAndroidDocOpen, setIsAndroidDocOpen] = useState(false);
 
   // API Key in localStorage
@@ -57,7 +60,7 @@ export default function DevicesPage() {
 
   const showSuccess = (msg: string) => {
     setSuccessToast(msg);
-    setTimeout(() => setSuccessToast(null), 3000);
+    setTimeout(() => setSuccessToast(null), 3500);
   };
 
   // Fetch Stats
@@ -143,7 +146,9 @@ export default function DevicesPage() {
       const data = await res.json();
       if (res.ok && data.success) {
         showSuccess(
-          `设备 ${device.deviceId} 状态已更新为：${nextStatus === 'normal' ? '正常' : '已禁用'}`
+          `设备 ${device.deviceId || device.wechatId} 状态已更新为：${
+            nextStatus === 'normal' ? '正常' : '已禁用'
+          }`
         );
         fetchDevices(pagination.page);
         fetchStats();
@@ -170,12 +175,12 @@ export default function DevicesPage() {
 
       const data = await res.json();
       if (res.ok && data.success) {
-        showSuccess('设备记录已成功删除');
+        showSuccess('记录已成功删除');
         fetchDevices(pagination.page);
         fetchStats();
         return true;
       } else {
-        setErrorMessage(data.error || '删除设备失败');
+        setErrorMessage(data.error || '删除失败');
         return false;
       }
     } catch (err: any) {
@@ -193,7 +198,7 @@ export default function DevicesPage() {
         setEditingDevice(null);
         setIsModalOpen(true);
       }}
-      createButtonText="新增设备"
+      createButtonText="新增设备/微信"
       onOpenApiDocs={() => setIsAndroidDocOpen(true)}
       apiKey={apiKey}
       onUpdateApiKey={handleUpdateApiKey}
@@ -220,6 +225,16 @@ export default function DevicesPage() {
         <div className="flex items-center space-x-2">
           <button
             onClick={() => {
+              setBindTargetDevice(null);
+              setIsBindModalOpen(true);
+            }}
+            className="flex items-center space-x-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300 hover:bg-emerald-500/20 hover:border-emerald-500/50 transition"
+          >
+            <Link2 className="h-3.5 w-3.5 text-emerald-400" />
+            <span>修改绑定关系</span>
+          </button>
+          <button
+            onClick={() => {
               setPointsTargetDevice(null);
               setIsPointsModalOpen(true);
             }}
@@ -243,7 +258,7 @@ export default function DevicesPage() {
             className="flex items-center space-x-1.5 rounded-lg bg-indigo-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-md shadow-indigo-600/30 hover:bg-indigo-500 transition"
           >
             <Plus className="h-4 w-4" />
-            <span>新增设备</span>
+            <span>新增设备 / 微信</span>
           </button>
         </div>
       </div>
@@ -306,6 +321,10 @@ export default function DevicesPage() {
           setPointsTargetDevice(device);
           setIsPointsModalOpen(true);
         }}
+        onOpenBindModal={(device) => {
+          setBindTargetDevice(device);
+          setIsBindModalOpen(true);
+        }}
         onDeleteDevice={handleDeleteDevice}
         onToggleStatus={handleToggleStatus}
       />
@@ -318,11 +337,27 @@ export default function DevicesPage() {
           setEditingDevice(null);
         }}
         onSuccess={() => {
-          showSuccess(editingDevice ? '设备信息已成功更新' : '新设备已成功添加');
+          showSuccess(editingDevice ? '设备信息已成功更新' : '新记录已成功添加');
           fetchDevices(pagination.page);
           fetchStats();
         }}
         initialDevice={editingDevice}
+        apiKey={apiKey}
+      />
+
+      {/* Binding Relationship Modal */}
+      <DeviceBindModal
+        isOpen={isBindModalOpen}
+        onClose={() => {
+          setIsBindModalOpen(false);
+          setBindTargetDevice(null);
+        }}
+        onSuccess={(msg) => {
+          showSuccess(msg || '绑定关系已成功修改');
+          fetchDevices(pagination.page);
+          fetchStats();
+        }}
+        initialDevice={bindTargetDevice}
         apiKey={apiKey}
       />
 

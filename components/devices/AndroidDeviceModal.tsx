@@ -38,6 +38,27 @@ export const AndroidDeviceModal: React.FC<AndroidDeviceModalProps> = ({ isOpen, 
     "reason": "每日签到奖励"
   }'`;
 
+  const curlBindExample = `# 按设备 ID 绑定微信 ID（或合并独立微信档案并累计积分）
+curl -X POST "https://your-domain.com/api/devices/bind" \\
+  -H "Content-Type: application/json" \\
+  -H "x-api-key: your-api-key" \\
+  -d '{
+    "mode": "byDeviceId",
+    "deviceId": "9a8b7c6d5e4f3210",
+    "wechatId": "wx_openid_123456",
+    "mergePoints": true
+  }'
+
+# 或：按微信 ID 绑定设备 ID
+curl -X POST "https://your-domain.com/api/devices/bind" \\
+  -H "Content-Type: application/json" \\
+  -H "x-api-key: your-api-key" \\
+  -d '{
+    "mode": "byWechatId",
+    "wechatId": "wx_openid_123456",
+    "deviceId": "9a8b7c6d5e4f3210"
+  }'`;
+
   const kotlinSdkCode = `package com.example.app.device
 
 import android.annotation.SuppressLint
@@ -229,7 +250,7 @@ data class DeviceProfile(
         {/* Content */}
         <div className="p-6 space-y-6 max-h-[75vh] overflow-y-auto text-xs text-slate-300">
           {/* 1. Endpoint summary */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-3.5 space-y-1.5">
               <div className="flex items-center space-x-1.5 text-indigo-400 font-semibold">
                 <Terminal className="h-4 w-4" />
@@ -268,10 +289,43 @@ data class DeviceProfile(
                 按 deviceId 增减或重设积分，系统自动记录修改前值、修改后值和变动值到日志集合。
               </p>
             </div>
+
+            <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-3.5 space-y-1.5">
+              <div className="flex items-center space-x-1.5 text-violet-400 font-semibold">
+                <Terminal className="h-4 w-4" />
+                <span>修改绑定关系</span>
+              </div>
+              <div className="font-mono text-[11px] text-slate-200">
+                <span className="text-violet-400 font-bold">POST</span> /api/devices/bind
+              </div>
+              <p className="text-[11px] text-slate-400">
+                支持按设备 ID 绑定微信 ID，或按微信 ID 绑定设备 ID，支持独立记录自动合并。
+              </p>
+            </div>
           </div>
 
           {/* 2. cURL Example */}
           <div className="space-y-4">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-slate-200">设备与微信绑定关系接口 cURL 示例</span>
+                <button
+                  onClick={() => handleCopy(curlBindExample, 4)}
+                  className="flex items-center space-x-1 text-slate-400 hover:text-slate-200 transition"
+                >
+                  {copiedIndex === 4 ? (
+                    <Check className="h-3.5 w-3.5 text-emerald-400" />
+                  ) : (
+                    <Copy className="h-3.5 w-3.5" />
+                  )}
+                  <span>{copiedIndex === 4 ? '已复制' : '复制命令'}</span>
+                </button>
+              </div>
+              <pre className="rounded-xl border border-slate-800 bg-slate-950 p-3.5 font-mono text-[11px] text-slate-300 overflow-x-auto whitespace-pre">
+                {curlBindExample}
+              </pre>
+            </div>
+
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <span className="font-semibold text-slate-200">客户端按设备 ID 调整积分 cURL 示例</span>

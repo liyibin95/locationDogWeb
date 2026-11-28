@@ -16,8 +16,8 @@ import {
   Plus,
   Eye,
   X,
-  AlertCircle,
   Sparkles,
+  Link2,
 } from 'lucide-react';
 
 interface DeviceTableProps {
@@ -33,6 +33,7 @@ interface DeviceTableProps {
   onOpenCreate: () => void;
   onEditDevice: (device: DeviceDocument) => void;
   onOpenPointsModal: (device: DeviceDocument) => void;
+  onOpenBindModal?: (device: DeviceDocument) => void;
   onDeleteDevice: (id: string) => Promise<boolean>;
   onToggleStatus: (device: DeviceDocument) => Promise<boolean>;
 }
@@ -45,6 +46,7 @@ export const DeviceTable: React.FC<DeviceTableProps> = ({
   onOpenCreate,
   onEditDevice,
   onOpenPointsModal,
+  onOpenBindModal,
   onDeleteDevice,
   onToggleStatus,
 }) => {
@@ -63,9 +65,10 @@ export const DeviceTable: React.FC<DeviceTableProps> = ({
     const id = device._id;
     if (!id) return;
 
+    const identifier = device.deviceId || device.wechatId || id;
     if (
       !window.confirm(
-        `确定要删除设备 [${device.deviceId}] 吗？\n当前积分：${device.points}，删除后数据不可恢复。`
+        `确定要删除记录 [${identifier}] 吗？\n当前积分：${device.points}，删除后数据不可恢复。`
       )
     ) {
       return;
@@ -116,9 +119,9 @@ export const DeviceTable: React.FC<DeviceTableProps> = ({
         <table className="w-full text-left text-xs">
           <thead className="border-b border-slate-800 bg-slate-900/90 text-[11px] font-semibold text-slate-400">
             <tr>
-              <th className="px-4 py-3">设备 ID (ID)</th>
-              <th className="px-4 py-3">设备信息</th>
-              <th className="px-4 py-3">绑定的微信 ID</th>
+              <th className="px-4 py-3">设备唯一标识 (deviceId)</th>
+              <th className="px-4 py-3">设备硬件 / 来源信息</th>
+              <th className="px-4 py-3">绑定的微信 ID (wechatId)</th>
               <th className="px-4 py-3">注册时间</th>
               <th className="px-4 py-3 text-right">积分数量</th>
               <th className="px-4 py-3 text-center">状态</th>
@@ -142,26 +145,28 @@ export const DeviceTable: React.FC<DeviceTableProps> = ({
                     <div className="rounded-full bg-slate-800/80 p-3 text-slate-400">
                       <Smartphone className="h-6 w-6" />
                     </div>
-                    <div className="text-sm font-medium text-slate-300">暂无设备记录</div>
+                    <div className="text-sm font-medium text-slate-300">暂无设备或微信记录</div>
                     <p className="text-xs text-slate-500">
-                      还没有添加或上报任何 Android 设备。你可以手动录入设备，或者通过 Android SDK 自动上报注册。
+                      还没有添加任何 Android 设备或微信用户档案。你可以按设备 ID 或微信 ID 手动录入，或通过客户端上报。
                     </p>
                     <button
                       onClick={onOpenCreate}
                       className="flex items-center space-x-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500 transition"
                     >
                       <Plus className="h-3.5 w-3.5" />
-                      <span>添加首台设备</span>
+                      <span>添加首条记录</span>
                     </button>
                   </div>
                 </td>
               </tr>
             ) : (
               devices.map((device) => {
-                const idStr = device._id || device.deviceId;
+                const idStr = device._id || device.deviceId || device.wechatId || 'dev';
                 const isCopied = copiedKey === idStr;
                 const isWechatCopied = copiedKey === `wx-${idStr}`;
                 const isNormal = device.status === 'normal';
+                const hasDevice = Boolean(device.deviceId && device.deviceId.trim());
+                const hasWechat = Boolean(device.wechatId && device.wechatId.trim());
 
                 return (
                   <tr
@@ -171,29 +176,55 @@ export const DeviceTable: React.FC<DeviceTableProps> = ({
                     {/* 1. 设备 ID */}
                     <td className="px-4 py-3.5">
                       <div className="flex items-center space-x-2">
-                        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 shrink-0">
+                        <div
+                          className={`flex h-7 w-7 items-center justify-center rounded-lg border shrink-0 ${
+                            hasDevice
+                              ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'
+                              : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                          }`}
+                        >
                           <Smartphone className="h-4 w-4" />
                         </div>
                         <div className="min-w-0">
-                          <div className="flex items-center space-x-1.5">
-                            <span className="font-mono font-medium text-slate-200 truncate max-w-[170px]" title={device.deviceId}>
-                              {device.deviceId}
-                            </span>
-                            <button
-                              onClick={() => handleCopy(device.deviceId, idStr)}
-                              className="text-slate-500 hover:text-slate-300 transition"
-                              title="复制设备ID"
-                            >
-                              {isCopied ? (
-                                <Check className="h-3 w-3 text-emerald-400" />
-                              ) : (
-                                <Copy className="h-3 w-3" />
+                          {hasDevice ? (
+                            <div className="flex items-center space-x-1.5">
+                              <span
+                                className="font-mono font-medium text-slate-200 truncate max-w-[170px]"
+                                title={device.deviceId}
+                              >
+                                {device.deviceId}
+                              </span>
+                              <button
+                                onClick={() => handleCopy(device.deviceId!, idStr)}
+                                className="text-slate-500 hover:text-slate-300 transition"
+                                title="复制设备ID"
+                              >
+                                {isCopied ? (
+                                  <Check className="h-3 w-3 text-emerald-400" />
+                                ) : (
+                                  <Copy className="h-3 w-3" />
+                                )}
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center space-x-1.5">
+                              <span className="inline-flex items-center rounded bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-300 border border-amber-500/20">
+                                未绑定设备
+                              </span>
+                              {onOpenBindModal && (
+                                <button
+                                  onClick={() => onOpenBindModal(device)}
+                                  className="text-[11px] text-indigo-400 hover:text-indigo-300 underline"
+                                  title="点击为此微信绑定设备"
+                                >
+                                  去绑定
+                                </button>
                               )}
-                            </button>
-                          </div>
+                            </div>
+                          )}
                           {device._id && (
                             <div className="text-[10px] text-slate-500 font-mono">
-                              DB ID: {device._id.slice(-6)}
+                              DB: {device._id.slice(-6)}
                             </div>
                           )}
                         </div>
@@ -204,7 +235,7 @@ export const DeviceTable: React.FC<DeviceTableProps> = ({
                     <td className="px-4 py-3.5 max-w-[220px]">
                       <div className="flex flex-col">
                         <span className="font-medium text-slate-200 truncate" title={device.deviceInfo}>
-                          {device.deviceInfo}
+                          {device.deviceInfo || (hasDevice ? 'Android 设备' : '微信用户档案')}
                         </span>
                         <div className="flex items-center space-x-1.5 mt-0.5">
                           {device.brand && (
@@ -228,7 +259,7 @@ export const DeviceTable: React.FC<DeviceTableProps> = ({
 
                     {/* 3. 绑定的微信 ID */}
                     <td className="px-4 py-3.5">
-                      {device.wechatId ? (
+                      {hasWechat ? (
                         <div className="flex items-center space-x-1.5">
                           <div className="inline-flex items-center space-x-1 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-400 border border-emerald-500/20">
                             <MessageSquare className="h-3 w-3" />
@@ -247,7 +278,18 @@ export const DeviceTable: React.FC<DeviceTableProps> = ({
                           </button>
                         </div>
                       ) : (
-                        <span className="text-slate-500 text-[11px] italic">未绑定微信</span>
+                        <div className="flex items-center space-x-1.5">
+                          <span className="text-slate-500 text-[11px] italic">未绑定微信</span>
+                          {onOpenBindModal && (
+                            <button
+                              onClick={() => onOpenBindModal(device)}
+                              className="text-[11px] text-emerald-400 hover:text-emerald-300 underline"
+                              title="点击为此设备绑定微信"
+                            >
+                              去绑定
+                            </button>
+                          )}
+                        </div>
                       )}
                     </td>
 
@@ -269,7 +311,7 @@ export const DeviceTable: React.FC<DeviceTableProps> = ({
                         <button
                           onClick={() => onOpenPointsModal(device)}
                           className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-amber-300 transition"
-                          title="调整该设备积分"
+                          title="调整该记录积分"
                         >
                           <Sparkles className="h-3.5 w-3.5" />
                         </button>
@@ -300,6 +342,15 @@ export const DeviceTable: React.FC<DeviceTableProps> = ({
                     {/* 7. 操作 */}
                     <td className="px-4 py-3.5 text-right whitespace-nowrap">
                       <div className="flex items-center justify-end space-x-1">
+                        {onOpenBindModal && (
+                          <button
+                            onClick={() => onOpenBindModal(device)}
+                            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-emerald-400 transition"
+                            title="修改绑定关系"
+                          >
+                            <Link2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
                         <button
                           onClick={() => setDetailDevice(device)}
                           className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition"
@@ -310,7 +361,7 @@ export const DeviceTable: React.FC<DeviceTableProps> = ({
                         <button
                           onClick={() => onEditDevice(device)}
                           className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-indigo-400 transition"
-                          title="编辑设备"
+                          title="编辑记录"
                         >
                           <Edit2 className="h-3.5 w-3.5" />
                         </button>
@@ -318,7 +369,7 @@ export const DeviceTable: React.FC<DeviceTableProps> = ({
                           onClick={() => handleDelete(device)}
                           disabled={deletingId === device._id}
                           className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-500/10 hover:text-rose-400 transition"
-                          title="删除设备"
+                          title="删除记录"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
@@ -335,7 +386,7 @@ export const DeviceTable: React.FC<DeviceTableProps> = ({
       {/* Pagination Footer */}
       <div className="flex items-center justify-between border-t border-slate-800 bg-slate-900/60 px-4 py-3">
         <div className="text-xs text-slate-400">
-          共 <span className="font-semibold text-slate-200">{pagination.total}</span> 台设备，
+          共 <span className="font-semibold text-slate-200">{pagination.total}</span> 条记录，
           当前第 <span className="font-semibold text-slate-200">{pagination.page}</span> /{' '}
           {pagination.totalPages || 1} 页
         </div>
@@ -373,7 +424,7 @@ export const DeviceTable: React.FC<DeviceTableProps> = ({
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center space-x-2">
                 <Smartphone className="h-5 w-5 text-indigo-400" />
-                <h3 className="text-sm font-bold text-white">Android 设备详情</h3>
+                <h3 className="text-sm font-bold text-white">设备与微信用户详情</h3>
               </div>
               <button
                 type="button"
@@ -393,19 +444,9 @@ export const DeviceTable: React.FC<DeviceTableProps> = ({
               <div className="grid grid-cols-3 gap-2 py-1 border-b border-slate-800/60">
                 <span className="text-slate-400">设备唯一标识 (deviceId):</span>
                 <span className="col-span-2 font-mono font-medium text-indigo-300">
-                  {detailDevice.deviceId}
-                </span>
-              </div>
-              <div className="grid grid-cols-3 gap-2 py-1 border-b border-slate-800/60">
-                <span className="text-slate-400">设备硬件信息:</span>
-                <span className="col-span-2 text-slate-200">{detailDevice.deviceInfo}</span>
-              </div>
-              <div className="grid grid-cols-3 gap-2 py-1 border-b border-slate-800/60">
-                <span className="text-slate-400">品牌 / 型号 / 系统:</span>
-                <span className="col-span-2 text-slate-300">
-                  {[detailDevice.brand, detailDevice.model, detailDevice.osVersion]
-                    .filter(Boolean)
-                    .join(' · ') || '未细分'}
+                  {detailDevice.deviceId || (
+                    <span className="text-amber-400/80 italic font-normal">暂未绑定设备</span>
+                  )}
                 </span>
               </div>
               <div className="grid grid-cols-3 gap-2 py-1 border-b border-slate-800/60">
@@ -414,8 +455,20 @@ export const DeviceTable: React.FC<DeviceTableProps> = ({
                   {detailDevice.wechatId ? (
                     <span className="font-mono text-emerald-400">{detailDevice.wechatId}</span>
                   ) : (
-                    <span className="text-slate-500 italic">未绑定</span>
+                    <span className="text-slate-500 italic">未绑定微信</span>
                   )}
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 py-1 border-b border-slate-800/60">
+                <span className="text-slate-400">设备信息 / 来源:</span>
+                <span className="col-span-2 text-slate-200">{detailDevice.deviceInfo || '-'}</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 py-1 border-b border-slate-800/60">
+                <span className="text-slate-400">品牌 / 型号 / 系统:</span>
+                <span className="col-span-2 text-slate-300">
+                  {[detailDevice.brand, detailDevice.model, detailDevice.osVersion]
+                    .filter(Boolean)
+                    .join(' · ') || '未细分'}
                 </span>
               </div>
               <div className="grid grid-cols-3 gap-2 py-1 border-b border-slate-800/60">
@@ -455,6 +508,19 @@ export const DeviceTable: React.FC<DeviceTableProps> = ({
             </div>
 
             <div className="flex justify-end space-x-2 pt-2 border-t border-slate-800">
+              {onOpenBindModal && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const target = detailDevice;
+                    setDetailDevice(null);
+                    onOpenBindModal(target);
+                  }}
+                  className="rounded-lg bg-emerald-600/20 text-emerald-300 border border-emerald-500/30 px-3 py-1.5 text-xs font-semibold hover:bg-emerald-600/30 transition"
+                >
+                  修改绑定关系
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => {
@@ -464,7 +530,7 @@ export const DeviceTable: React.FC<DeviceTableProps> = ({
                 }}
                 className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500 transition"
               >
-                编辑此设备
+                编辑此记录
               </button>
               <button
                 type="button"

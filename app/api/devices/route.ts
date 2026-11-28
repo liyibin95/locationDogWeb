@@ -123,7 +123,7 @@ export async function GET(request: NextRequest) {
 }
 
 /**
- * POST /api/devices - 新增 Android 设备
+ * POST /api/devices - 新增 Android 设备（支持按设备ID新增或按微信ID新增）
  */
 export async function POST(request: NextRequest) {
   try {
@@ -146,35 +146,60 @@ export async function POST(request: NextRequest) {
       createdAt,
     } = body;
 
-    if (!deviceId || typeof deviceId !== 'string' || !deviceId.trim()) {
+    const cleanDeviceId = typeof deviceId === 'string' ? deviceId.trim() : '';
+    const cleanWechatId = typeof wechatId === 'string' ? wechatId.trim() : '';
+
+    // 必须提供设备 ID 或微信 ID 之一
+    if (!cleanDeviceId && !cleanWechatId) {
       return NextResponse.json(
-        { success: false, error: '设备ID (deviceId) 不能为空' },
+        { success: false, error: '必须提供设备 ID (deviceId) 或微信 ID (wechatId)' },
         { status: 400 }
       );
     }
-
-    if (!deviceInfo || typeof deviceInfo !== 'string' || !deviceInfo.trim()) {
-      return NextResponse.json(
-        { success: false, error: '设备信息 (deviceInfo) 不能为空' },
-        { status: 400 }
-      );
-    }
-
-    const cleanDeviceId = deviceId.trim();
-    const cleanPoints = isNaN(Number(points)) ? 0 : Math.max(0, Math.floor(Number(points)));
 
     const collection = await getDevicesCollection();
 
-    // 检查设备ID唯一性
-    const existing = await collection.findOne({ deviceId: cleanDeviceId });
-    if (existing) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: `设备ID "${cleanDeviceId}" 已存在，不可重复添加。`,
-        },
-        { status: 409 }
-      );
+    // 1. 若提供了设备ID，校验唯一性
+    if (cleanDeviceId) {
+      const existingDevice = await collection.findOne({ deviceId: cleanDeviceId });
+      if (existingDevice) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `设备 ID "${cleanDeviceId}" 已存在，不可重复添加。`,
+          },
+          { status: 409 }
+        );
+      }
+    }
+
+    // 2. 若提供了微信ID，校验唯一性
+    if (cleanWechatId) {
+      const existingWechat = await collection.findOne({ wechatId: cleanWechatId });
+      if (existingWechat) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `微信 ID "${cleanWechatId}" 已存在（已绑定设备: ${existingWechat.deviceId || '暂未绑定设备'}），不可重复添加。`,
+          },
+          { status: 409 }
+        );
+      }
+    }
+
+    const cleanPoints = isNaN(Number(points)) ? 0 : Math.max(0, Math.floor(Number(points)));
+
+    // 设备信息 (deviceInfo) 兜底：
+    // 若按微信 ID 新增且未传 deviceInfo，自动生成默认描述；
+    // 若按设备 ID 新增且未传 deviceInfo，根据品牌型号或设备ID生成默认描述
+    let finalDeviceInfo = '';
+    if (typeof deviceInfo === 'string' && deviceInfo.trim()) {
+      finalDeviceInfo = deviceInfo.trim();
+    } else if (cleanDeviceId) {
+      const parts = [brand?.trim(), model?.trim(), osVersion?.trim() ? `(${osVersion.trim()})` : ''].filter(Boolean);
+      finalDeviceInfo = parts.length > 0 ? parts.join(' ') : `Android 设备 (${cleanDeviceId.slice(-6)})`;
+    } else {
+      finalDeviceInfo = `微信用户 (${cleanWechatId})`;
     }
 
     const now = new Date();
@@ -186,13 +211,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const newDevice: DeviceDocument = {
-      deviceId: cleanDeviceId,
-      deviceInfo: deviceInfo.trim(),
+    const newDevice: any = {
+      deviceInfo: finalDeviceInfo,
       brand: brand?.trim() || '',
       model: model?.trim() || '',
       osVersion: osVersion?.trim() || '',
-      wechatId: wechatId?.trim() || '',
       points: cleanPoints,
       status: status === 'disabled' ? 'disabled' : 'normal',
       remark: remark?.trim() || '',
@@ -200,15 +223,29 @@ export async function POST(request: NextRequest) {
       updatedAt: now,
     };
 
+    // 仅在非空时设置，避免 sparse 唯一索引冲突
+    if (cleanDeviceId) {
+      newDevice.deviceId = cleanDeviceId;
+    }
+    if (cleanWechatId) {
+      newDevice.wechatId = cleanWechatId;
+    }
+
     const result = await collection.insertOne(newDevice);
 
     deleteCachePattern('cache:devices:*').catch(() => {});
+
+    const message = cleanDeviceId
+      ? cleanWechatId
+        ? '设备与微信记录添加成功'
+        : '设备添加成功'
+      : '微信用户记录添加成功（其它字段已使用默认配置）';
 
     return NextResponse.json(
       {
         success: true,
         data: { ...newDevice, _id: result.insertedId.toString() },
-        message: '设备添加成功',
+        message,
       },
       { status: 201 }
     );
@@ -248,9 +285,9 @@ export async function PUT(request: NextRequest) {
       createdAt,
     } = body;
 
-    if (!_id && (!deviceId || typeof deviceId !== 'string' || !deviceId.trim())) {
+    if (!_id && (!deviceId || typeof deviceId !== 'string' || !deviceId.trim()) && (!wechatId || typeof wechatId !== 'string' || !wechatId.trim())) {
       return NextResponse.json(
-        { success: false, error: '必须提供设备 _id 或 deviceId 参数' },
+        { success: false, error: '必须提供设备 _id、deviceId 或 wechatId 参数' },
         { status: 400 }
       );
     }
@@ -269,6 +306,9 @@ export async function PUT(request: NextRequest) {
         if (deviceId && typeof deviceId === 'string' && deviceId.trim()) {
           queryFilter = { deviceId: deviceId.trim() };
           current = await collection.findOne(queryFilter);
+        } else if (wechatId && typeof wechatId === 'string' && wechatId.trim()) {
+          queryFilter = { wechatId: wechatId.trim() };
+          current = await collection.findOne(queryFilter);
         } else {
           return NextResponse.json({ success: false, error: '无效的 _id 格式' }, { status: 400 });
         }
@@ -276,12 +316,15 @@ export async function PUT(request: NextRequest) {
     } else if (deviceId && typeof deviceId === 'string' && deviceId.trim()) {
       queryFilter = { deviceId: deviceId.trim() };
       current = await collection.findOne(queryFilter);
+    } else if (wechatId && typeof wechatId === 'string' && wechatId.trim()) {
+      queryFilter = { wechatId: wechatId.trim() };
+      current = await collection.findOne(queryFilter);
     }
 
     if (!current || !queryFilter) {
-      const identifier = _id || deviceId;
+      const identifier = _id || deviceId || wechatId;
       return NextResponse.json(
-        { success: false, error: `未找到指定设备 (${identifier})` },
+        { success: false, error: `未找到指定设备或微信记录 (${identifier})` },
         { status: 404 }
       );
     }
@@ -360,7 +403,7 @@ export async function PUT(request: NextRequest) {
       const userAgent = request.headers.get('user-agent') || '';
 
       await recordDevicePointsLog({
-        deviceId: current.deviceId,
+        deviceId: current.deviceId || current.wechatId || current._id?.toString() || 'unknown',
         deviceDbId: current._id?.toString(),
         deviceInfo: current.deviceInfo,
         beforePoints,
